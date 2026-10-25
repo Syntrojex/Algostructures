@@ -23,6 +23,7 @@ const ALIASES: Record<string, string[]> = {
   'queue-visualizer': ['queue', 'queue class', 'enqueue dequeue', 'fifo'],
   'hash-visualizer': ['hash', 'hash table', 'hash map', 'buckets', 'collision', 'chaining'],
   'bst-visualizer': ['bst', 'binary search tree', 'tree', 'inorder', 'preorder', 'postorder', 'level order', 'traversal'],
+  'avl-visualizer': ['avl', 'avl tree', 'balanced tree', 'self balancing', 'rotation', 'rotations', 'left rotation', 'right rotation', 'balance factor', 'll', 'rr', 'lr', 'rl', 'tree'],
   'heap-visualizer': ['heap', 'min heap', 'priority queue', 'heapify', 'extract min'],
   'bubble-sort': ['bubble', 'sorting', 'adjacent swap'],
   'selection-sort': ['selection', 'sorting', 'find minimum'],

@@ -4,6 +4,7 @@ import { sllLab, dllLab, cllLab } from './listLabs';
 import { stackLab, queueLab } from './stackQueueLabs';
 import { bstLab, heapLab, hashLab } from './treeHashLabs';
 import { recursionLab } from './recursionLab';
+import { avlLab } from './avlLab';
 
 export const LABS: Record<string, Lab> = {
   array: arrayLab,
@@ -13,6 +14,7 @@ export const LABS: Record<string, Lab> = {
   stack: stackLab,
   queue: queueLab,
   bst: bstLab,
+  avl: avlLab,
   heap: heapLab,
   hash: hashLab,
   recursion: recursionLab,

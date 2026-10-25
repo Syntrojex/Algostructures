@@ -10,6 +10,7 @@ const LOADERS: Record<string, () => Promise<Lab>> = {
   stack: () => import('./stackQueueLabs').then(m => m.stackLab),
   queue: () => import('./stackQueueLabs').then(m => m.queueLab),
   bst: () => import('./treeHashLabs').then(m => m.bstLab),
+  avl: () => import('./avlLab').then(m => m.avlLab),
   heap: () => import('./treeHashLabs').then(m => m.heapLab),
   hash: () => import('./treeHashLabs').then(m => m.hashLab),
   recursion: () => import('./recursionLab').then(m => m.recursionLab),

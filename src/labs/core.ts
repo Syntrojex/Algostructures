@@ -67,7 +67,9 @@ export interface TreeSnap {
   path: number[];             // nodes already visited on the way down
   ptrs: Ptr[];
   floating?: number[];        // brand-new nodes that exist in memory but are not linked into the tree yet
-  pointers?: boolean;         // draw edges as pointer arrows (BST); heaps are array-backed, so no arrowheads
+  pointers?: boolean;         // draw edges as pointer arrows (BST/AVL); heaps are array-backed, so no arrowheads
+  badges?: Record<number, string>;   // small label under a node, e.g. AVL "h2 · +1" (height · balance factor)
+  badBadges?: number[];              // nodes whose badge is a warning (an AVL node with |balance factor| > 1)
   arrayView?: (number | null)[];  // heaps also show their backing array
   arrayHi?: number[];
 }
@@ -138,7 +140,8 @@ export type Snap = ArraySnap | ListSnap | TreeSnap | HashSnap | CallsSnap;
 export interface LabStep {
   line: number;       // 1-based line number inside lab.code (0 = no line)
   note: string;
-  out?: string;       // a line of cout output produced by this step
+  out?: string;       // cout output produced by this step
+  inline?: boolean;   // true → `cout << x << " "` (appends to the current console line instead of starting a new one)
   snap: Snap;
 }
 
@@ -193,9 +196,9 @@ export function parseCode(raw: string): { code: string; marks: Record<string, nu
 /** small helper every lab uses to build steps without repeating itself */
 export function stepper(marks: Record<string, number>, snapOf: () => Snap) {
   const steps: LabStep[] = [];
-  const S = (mark: string, note: string, patch?: Partial<Snap>, out?: string) => {
+  const S = (mark: string, note: string, patch?: Partial<Snap>, out?: string, inline?: boolean) => {
     const snap = { ...snapOf(), ...(patch || {}) } as Snap;
-    steps.push({ line: marks[mark] ?? 0, note, out, snap });
+    steps.push({ line: marks[mark] ?? 0, note, out, inline, snap });
   };
   return { steps, S };
 }

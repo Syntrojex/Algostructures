@@ -460,11 +460,11 @@ function runBst(st: BState, opId: string, a: Record<string, number>): LabStep[] 
         S('in_left', `At ${N(node)}: recurse left before doing anything else.`, M({ hi: [node], path: visited.slice() }));
         rec(st.nodes[node].l);
         visited.push(node);
-        S('in_visit', `Visit ${N(node)}.`, M({ hi: [node], path: visited.slice() }));
+        S('in_visit', `Visit ${N(node)}.`, M({ hi: [node], path: visited.slice() }), String(N(node)), true);
         rec(st.nodes[node].r);
       };
       rec(st.root);
-      S('in_visit', 'Done.', M({ path: visited.slice() }), visited.map(N).join(' '));
+      S('in_visit', `Done. Output: ${visited.map(N).join(' ')}`, M({ path: visited.slice() }));
       break;
     }
 
@@ -477,11 +477,11 @@ function runBst(st: BState, opId: string, a: Record<string, number>): LabStep[] 
         S('in_left', `At ${N(node)}: recurse left first.`, M({ hi: [node], path: visited.slice() }));
         rec(st.nodes[node].l);
         out.push(N(node)); visited.push(node);
-        S('in_visit', `Visit ${N(node)} — the next-smallest remaining value.`, M({ hi: [node], path: visited.slice() }));
+        S('in_visit', `Visit ${N(node)} — the next-smallest remaining value.`, M({ hi: [node], path: visited.slice() }), String(N(node)), true);
         rec(st.nodes[node].r);
       };
       rec(st.root);
-      S('sasc_call', 'Done — sorted ascending, purely as a side effect of the tree shape.', M({ path: visited.slice() }), out.join(' '));
+      S('sasc_call', `Done — sorted ascending, purely as a side effect of the tree shape. Output: ${out.join(' ')}`, M({ path: visited.slice() }));
       break;
     }
 
@@ -494,11 +494,11 @@ function runBst(st: BState, opId: string, a: Record<string, number>): LabStep[] 
         S('rin_right', `At ${N(node)}: recurse RIGHT first this time.`, M({ hi: [node], path: visited.slice() }));
         rec(st.nodes[node].r);
         out.push(N(node)); visited.push(node);
-        S('rin_visit', `Visit ${N(node)} — the next-largest remaining value.`, M({ hi: [node], path: visited.slice() }));
+        S('rin_visit', `Visit ${N(node)} — the next-largest remaining value.`, M({ hi: [node], path: visited.slice() }), String(N(node)), true);
         rec(st.nodes[node].l);
       };
       rec(st.root);
-      S('sdesc_call', 'Done — sorted descending.', M({ path: visited.slice() }), out.join(' '));
+      S('sdesc_call', `Done — sorted descending. Output: ${out.join(' ')}`, M({ path: visited.slice() }));
       break;
     }
 
@@ -515,7 +515,7 @@ function runBst(st: BState, opId: string, a: Record<string, number>): LabStep[] 
         const curr = q.shift()!;
         S('trav_front', `Node* curr = q.front(); q.pop() → curr is ${N(curr)}.`, M({ hi: [curr], path: visited.slice() }));
         visited.push(curr);
-        S('trav_print', `cout << curr->data → printed ${N(curr)}.`, M({ hi: [curr], path: visited.slice() }), `${N(curr)}`);
+        S('trav_print', `cout << curr->data → printed ${N(curr)}.`, M({ hi: [curr], path: visited.slice() }), `${N(curr)}`, true);
         if (st.nodes[curr].l !== null) { q.push(st.nodes[curr].l!); S('trav_left', `Left child (${N(st.nodes[curr].l!)}) exists → enqueued.`, M({ hi: [st.nodes[curr].l!] })); }
         else S('trav_left', 'No left child.');
         if (st.nodes[curr].r !== null) { q.push(st.nodes[curr].r!); S('trav_right', `Right child (${N(st.nodes[curr].r!)}) exists → enqueued.`, M({ hi: [st.nodes[curr].r!] })); }
@@ -537,23 +537,23 @@ function runBst(st: BState, opId: string, a: Record<string, number>): LabStep[] 
         if (node === null) return;
         if (kind === 'preorder') {
           out.push(N(node)); visited.push(node);
-          S('pre_visit', `Visit ${N(node)} FIRST, then descend. Preorder is root → left → right, which is why it reproduces the tree's shape when you rebuild from it.`, M({ hi: [node], path: visited.slice() }));
+          S('pre_visit', `Visit ${N(node)} FIRST, then descend. Preorder is root → left → right, which is why it reproduces the tree's shape when you rebuild from it.`, M({ hi: [node], path: visited.slice() }), String(N(node)), true);
         }
         if (kind === 'inorder') S('in_left', `At ${N(node)}: recurse left before doing anything else.`, M({ hi: [node], path: visited.slice() }));
         if (kind === 'postorder') S('post_left', `At ${N(node)}: both children must finish before this node is visited.`, M({ hi: [node], path: visited.slice() }));
         rec(st.nodes[node].l);
         if (kind === 'inorder') {
           out.push(N(node)); visited.push(node);
-          S('in_visit', `Visit ${N(node)} — left subtree is fully done. Inorder on a BST always comes out sorted, which is the single most useful property of the whole structure.`, M({ hi: [node], path: visited.slice() }));
+          S('in_visit', `Visit ${N(node)} — left subtree is fully done. Inorder on a BST always comes out sorted, which is the single most useful property of the whole structure.`, M({ hi: [node], path: visited.slice() }), String(N(node)), true);
         }
         rec(st.nodes[node].r);
         if (kind === 'postorder') {
           out.push(N(node)); visited.push(node);
-          S('post_visit', `Visit ${N(node)} — both subtrees are finished. Postorder is what a destructor uses: free the children before the parent.`, M({ hi: [node], path: visited.slice() }));
+          S('post_visit', `Visit ${N(node)} — both subtrees are finished. Postorder is what a destructor uses: free the children before the parent.`, M({ hi: [node], path: visited.slice() }), String(N(node)), true);
         }
       };
       rec(st.root);
-      S(kind, 'Traversal complete — every node touched exactly once, O(n).', M({ path: visited.slice() }), out.join(' '));
+      S(kind, `Traversal complete — every node touched exactly once, O(n). Output: ${out.join(' ')}`, M({ path: visited.slice() }));
       break;
     }
   }
@@ -562,7 +562,7 @@ function runBst(st: BState, opId: string, a: Record<string, number>): LabStep[] 
 
 /* A new BST node first exists on its own: show it hovering above the tree, UNLINKED, in the step where it is created,
    so the next step (parent->left / parent->right = newNode) visibly connects it. */
-function holdNewNodes(steps: LabStep[]): LabStep[] {
+export function holdNewNodes(steps: LabStep[]): LabStep[] {
   const out: LabStep[] = [];
   const known = new Set<number>();
   for (let i = 0; i < steps.length; i++) {

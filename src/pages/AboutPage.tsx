@@ -19,7 +19,7 @@ export default function AboutPage() {
       <h2>Class Labs — Run the Code, Line by Line</h2>
       <p>
         Every core data structure — Array, Singly/Doubly/Circular Linked List, Stack, Queue,
-        Binary Search Tree, Heap and Hash Table — has a Class Lab: real, runnable C++ that
+        Binary Search Tree, AVL Tree, Heap and Hash Table — has a Class Lab: real, runnable C++ that
         highlights line by line as it executes, so you can watch <code>temp</code> walk down a
         list or a value bubble up a heap. Pick an operation from the dropdown — insert, delete,
         update, search, sort, rotate and more — and step through what the code does to the

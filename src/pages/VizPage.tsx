@@ -1,7 +1,10 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { useApp } from '../contexts/AppContext';
 import { PAGE_BY_KEY, GROUP_BY_KEY, pagesOf, type Spec, type VizPage as VizPageData } from '../data/registry';
 import VizBoundary from '../components/VizBoundary';
+import CodeDrawer from '../components/CodeDrawer';
+import { CODE_KEYS } from '../data/codeKeys';
+import type { CodeEntry } from '../data/codes';
 
 // Every visualizer is its own chunk — a page only downloads the code it actually shows.
 const ClassLab = lazy(() => import('../components/visualizers/ClassLab'));
@@ -71,6 +74,11 @@ function Body({ page, goTo }: { page: VizPageData; goTo: (group: string, sub: st
 
 export default function VizPage() {
   const { currentTopic, navigateTo, goHome } = useApp();
+  const [codeOpen, setCodeOpen] = useState(false);
+  const [entry, setEntry] = useState<CodeEntry | null>(null);
+  const subKey = currentTopic?.sub;
+  useEffect(() => { setCodeOpen(false); setEntry(null); }, [subKey]);          // a new page starts with the panel closed
+  const openCode = (key: string) => { import('../data/codes').then(m => { setEntry(m.CODES[key] ?? null); setCodeOpen(true); }); };
   if (!currentTopic) return null;
 
   const page = PAGE_BY_KEY[currentTopic.sub];
@@ -99,6 +107,11 @@ export default function VizPage() {
           {page.badge && <span className="viz-badge">{page.badge}</span>}
         </div>
         <div className="topic-desc">{page.blurb}</div>
+        {CODE_KEYS.has(page.key) && (
+          <button className="see-code-btn" onClick={() => openCode(page.key)}>
+            <span className="see-code-ico">{'</>'}</span> See C++ code
+          </button>
+        )}
       </div>
 
       {siblings.length > 1 && (
@@ -116,6 +129,10 @@ export default function VizPage() {
             </button>
           ))}
         </div>
+      )}
+
+      {entry && (
+        <CodeDrawer open={codeOpen} onClose={() => setCodeOpen(false)} title={page.title} filename={entry.filename} code={entry.code} />
       )}
 
       <VizBoundary key={page.key} what="visualizer">

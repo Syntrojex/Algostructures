@@ -1,4 +1,5 @@
-import { useState, useMemo, useRef, useEffect, type ChangeEvent } from 'react';
+import NumberStepper from '../NumberStepper';
+import { useState, useMemo, useRef, useEffect } from 'react';
 
 type BitOp = 'and' | 'or' | 'xor' | 'not' | 'lshift' | 'rshift' | 'setbit' | 'countbits';
 
@@ -36,13 +37,6 @@ export default function BitVisualizer({ modes }: BitVisualizerProps) {
   function clamp(n: number, lo: number, hi: number) { return Math.max(lo, Math.min(hi, n)); }
 
   // Only digits are allowed while typing; empty string is allowed so backspace can fully clear the field.
-  function handleDigitsChange(setter: (v: string) => void, maxLen: number) {
-    return (e: ChangeEvent<HTMLInputElement>) => {
-      const v = e.target.value;
-      if (v === '' || (/^\d+$/.test(v) && v.length <= maxLen)) setter(v);
-    };
-  }
-
   // ── Step-by-step animation state ──
   const [revealed, setRevealed] = useState(BITS); // how many result bits are revealed, left to right
   const [running, setRunning] = useState(false);
@@ -139,21 +133,21 @@ export default function BitVisualizer({ modes }: BitVisualizerProps) {
 
       <div className="bit-controls">
         <label>
-          A = <input type="text" inputMode="numeric" maxLength={3} value={aText} onChange={handleDigitsChange(setAText, 3)} placeholder="0-255" />
+          A = <NumberStepper value={aText} onChange={setAText} min={0} max={255} width={92} placeholder="0-255" ariaLabel="A" />
         </label>
         {needsB && (
           <label>
-            B = <input type="text" inputMode="numeric" maxLength={3} value={bText} onChange={handleDigitsChange(setBText, 3)} placeholder="0-255" />
+            B = <NumberStepper value={bText} onChange={setBText} min={0} max={255} width={92} placeholder="0-255" ariaLabel="B" />
           </label>
         )}
         {needsShift && (
           <label>
-            Shift by <input type="text" inputMode="numeric" maxLength={1} value={shiftText} onChange={handleDigitsChange(setShiftText, 1)} placeholder="0-7" />
+            Shift by <NumberStepper value={shiftText} onChange={setShiftText} min={0} max={7} width={78} placeholder="0-7" ariaLabel="Shift" />
           </label>
         )}
         {needsBitPos && (
           <label>
-            Bit position <input type="text" inputMode="numeric" maxLength={1} value={bitPosText} onChange={handleDigitsChange(setBitPosText, 1)} placeholder="0-7" />
+            Bit position <NumberStepper value={bitPosText} onChange={setBitPosText} min={0} max={7} width={78} placeholder="0-7" ariaLabel="Bit position" />
           </label>
         )}
       </div>

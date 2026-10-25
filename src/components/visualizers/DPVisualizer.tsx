@@ -1,3 +1,4 @@
+import NumberStepper from '../NumberStepper';
 import { useState } from 'react';
 import { StepControls, useStepper } from './useStepper';
 import { coinChange, editDistance, knapsack, lcs, parseNums, INF, type DPConf } from '../../utils/dpTables';
@@ -30,10 +31,10 @@ function build(mode: DPMode, f: Record<string, string>): DPConf | string {
   return mode === 'lcs' ? lcs(f.a, f.b) : editDistance(f.a, f.b);
 }
 
-const FIELDS: Record<DPMode, { key: string; label: string; width: number; hint: string }[]> = {
-  knapsack:     [{ key: 'wt', label: 'Weights', width: 150, hint: '1, 3, 4, 5' }, { key: 'val', label: 'Values', width: 150, hint: '1, 4, 5, 7' }, { key: 'cap', label: 'Capacity', width: 70, hint: '7' }],
+const FIELDS: Record<DPMode, { key: string; label: string; width: number; hint: string; num?: [number, number] }[]> = {
+  knapsack:     [{ key: 'wt', label: 'Weights', width: 150, hint: '1, 3, 4, 5' }, { key: 'val', label: 'Values', width: 150, hint: '1, 4, 5, 7' }, { key: 'cap', label: 'Capacity', width: 70, hint: '7', num: [1, 15] }],
   lcs:          [{ key: 'a', label: 'String A', width: 130, hint: 'AGGTAB' }, { key: 'b', label: 'String B', width: 130, hint: 'GXTXAYB' }],
-  coinchange:   [{ key: 'coins', label: 'Coins', width: 150, hint: '1, 3, 4' }, { key: 'amount', label: 'Amount', width: 80, hint: '6' }],
+  coinchange:   [{ key: 'coins', label: 'Coins', width: 150, hint: '1, 3, 4' }, { key: 'amount', label: 'Amount', width: 80, hint: '6', num: [1, 25] }],
   editdistance: [{ key: 'a', label: 'From', width: 130, hint: 'kitten' }, { key: 'b', label: 'To', width: 130, hint: 'sitting' }],
 };
 
@@ -62,8 +63,12 @@ export default function DPVisualizer({ mode = 'knapsack' }: { mode?: DPMode }) {
         {FIELDS[mode].map(f => (
           <span key={f.key} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
             <label>{f.label}:</label>
-            <input className="viz-input" value={form[f.key]} placeholder={f.hint} style={{ width: f.width }} spellCheck={false}
-              onChange={e => setForm(p => ({ ...p, [f.key]: e.target.value }))} onKeyDown={e => e.key === 'Enter' && apply()} />
+            {f.num ? (
+              <NumberStepper value={form[f.key]} onChange={v => setForm(p => ({ ...p, [f.key]: v }))} min={f.num[0]} max={f.num[1]} width={f.width + 26} placeholder={f.hint} ariaLabel={f.label} onEnter={apply} />
+            ) : (
+              <input className="viz-input" value={form[f.key]} placeholder={f.hint} style={{ width: f.width }} spellCheck={false}
+                onChange={e => setForm(p => ({ ...p, [f.key]: e.target.value }))} onKeyDown={e => e.key === 'Enter' && apply()} />
+            )}
           </span>
         ))}
         <button className="viz-btn cyan" onClick={apply}>✔ Apply</button>

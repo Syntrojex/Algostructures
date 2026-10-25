@@ -1,3 +1,4 @@
+import NumberStepper from '../NumberStepper';
 import { useState, useMemo, useRef, useEffect } from 'react';
 
 type ArrayMode = 'twopointer' | 'slidingwindow' | 'kadane' | 'prefixsum';
@@ -171,10 +172,10 @@ export default function ArrayVisualizer({ modes }: ArrayVisualizerProps) {
           />
         </label>
         {needsTarget && (
-          <label>Target = <input type="text" className="viz-input" style={{ width: '60px' }} value={target} onChange={e => setTarget(e.target.value.replace(/[^0-9-]/g, ''))} /></label>
+          <label>Target = <NumberStepper value={target} onChange={setTarget} min={-999} max={999} width={96} ariaLabel="Target" /></label>
         )}
         {needsK && (
-          <label>Window size k = <input type="text" className="viz-input" style={{ width: '50px' }} value={k} onChange={e => setK(e.target.value.replace(/[^0-9]/g, ''))} /></label>
+          <label>Window size k = <NumberStepper value={k} onChange={setK} min={1} max={12} width={84} ariaLabel="Window size" /></label>
         )}
       </div>
 

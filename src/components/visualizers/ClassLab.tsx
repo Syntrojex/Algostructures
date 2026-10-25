@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { loadLab } from '../../labs';
 import HanoiBoard from './HanoiBoard';
+import NumberStepper from '../NumberStepper';
 import type { ArraySnap, CallsSnap, HashSnap, Lab, LabStep, ListSnap, Ptr, Snap, TreeSnap } from '../../labs/core';
 import { highlightCode } from '../../utils/highlight';
 
@@ -342,6 +343,9 @@ function TreeView({ s }: { s: TreeSnap }) {
               <g key={n.id} className={`lab-tree-node ${cls}`}>
                 <circle cx={cx} cy={cy} r={R} />
                 <text x={cx} y={cy + 5} textAnchor="middle">{n.value}</text>
+                {s.badges && s.badges[n.id] && (
+                  <text x={cx} y={cy + R + 13} textAnchor="middle" className={`lab-tree-badge${s.badBadges?.includes(n.id) ? ' bad' : ''}`}>{s.badges[n.id]}</text>
+                )}
               </g>
             );
           })}
@@ -475,21 +479,31 @@ function CallsView({ s }: { s: CallsSnap }) {
       <div className="lab-calls-grid">
         {/* call stack */}
         <div className="lab-callstack">
-          <div className="lab-calls-head">CALL STACK <span>(top = running)</span></div>
-          {frames.length === 0 && <div className="lab-calls-empty">empty</div>}
-          {frames.slice(0, 12).map((f, i) => (
-            <div key={f.id} className={`lab-frame lab-frame-${f.status}`}>
-              <div className="lab-frame-call">{f.call}</div>
-              <div className="lab-frame-vars">{f.vars}</div>
-              <div className="lab-frame-status">
-                {f.status === 'running' && (i === 0 ? '▶ running' : '▶ running')}
-                {f.status === 'waiting' && <>⏳ waiting for <b>{f.waitFor}</b></>}
-                {f.status === 'returning' && <>↩ returns <b>{f.ret}</b></>}
+          <div className="lab-calls-head">CALL STACK <span>(grows upward ↑)</span></div>
+          {frames.length === 0 && <div className="lab-calls-empty">empty — nothing is running yet</div>}
+          {frames.slice(0, 12).map((f, i) => {
+            const depth = frames.length - i;
+            const vars = f.vars.split(/,\s*(?=[A-Za-z_]+\s*=)/).filter(Boolean);
+            return (
+              <div key={f.id} className={`lab-frame lab-frame-${f.status}${i === 0 ? ' top' : ''}`}>
+                <div className="lab-frame-head">
+                  <span className="lab-frame-depth">#{depth}</span>
+                  <span className="lab-frame-call">{f.call}</span>
+                  {i === 0 && <span className="lab-frame-toptag">TOP</span>}
+                </div>
+                <div className="lab-frame-vars">
+                  {vars.map((v, k) => <span key={k} className="lab-frame-var">{v}</span>)}
+                </div>
+                <div className="lab-frame-status">
+                  {f.status === 'running' && <span className="pill run">▶ running</span>}
+                  {f.status === 'waiting' && <><span className="pill wait">⏳ waiting</span><span className="lab-frame-for">for <b>{f.waitFor}</b></span></>}
+                  {f.status === 'returning' && <><span className="pill ret">↩ returns</span><b className="lab-frame-retval">{f.ret}</b></>}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
           {frames.length > 12 && <div className="lab-calls-empty">… {frames.length - 12} more frames below</div>}
-          <div className="lab-callstack-floor">main()</div>
+          <div className="lab-callstack-floor">main()  ·  bottom of the stack</div>
         </div>
 
         {/* recursion tree */}
@@ -616,8 +630,16 @@ function ClassLabBody({ lab }: { lab: Lab }) {
   };
 
   const shownConsole = useMemo(() => {
-    const live = steps.slice(0, idx + 1).filter(s => s.out).map(s => s.out as string);
-    return [...base, ...live];
+    const lines = [...base];
+    let open = false;                                        // the last line is an unfinished `cout << x << " "` run
+    for (const s of steps.slice(0, idx + 1)) {
+      if (!s.out) continue;
+      if (s.inline) {
+        if (open && lines.length) lines[lines.length - 1] += ' ' + s.out;
+        else { lines.push(s.out); open = true; }
+      } else { lines.push(s.out); open = false; }
+    }
+    return lines;
   }, [base, steps, idx]);
 
   const current = idx >= 0 && steps[idx] ? steps[idx] : null;
@@ -697,12 +719,15 @@ function ClassLabBody({ lab }: { lab: Lab }) {
         {op.params.map(p => (
           <span className="lab-arg" key={p.name}>
             <label className="lab-label">{p.label}</label>
-            <input
-              className="viz-input lab-input"
-              type="number"
+            <NumberStepper
               value={args[p.name] ?? ''}
-              onChange={e => { setInputErr(''); setArgs(a => ({ ...a, [p.name]: e.target.value })); }}
-              onKeyDown={e => { if (e.key === 'Enter') runOp(); }}
+              onChange={v => { setInputErr(''); setArgs(a => ({ ...a, [p.name]: v })); }}
+              onEnter={runOp}
+              min={-9999}
+              max={9999}
+              width={84}
+              ariaLabel={p.label}
+              invalid={!!inputErr}
             />
           </span>
         ))}

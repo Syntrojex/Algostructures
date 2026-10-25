@@ -1,3 +1,4 @@
+import NumberStepper from '../NumberStepper';
 import { useState, useRef, useEffect, useCallback } from 'react';
 
 interface GraphNode {
@@ -391,14 +392,7 @@ export default function DijkstraVisualizer() {
             className="edge-weight-input"
             style={{ left: editingEdge.x - 30, top: editingEdge.y - 20, position: 'absolute' }}
           >
-            <input
-              type="number"
-              value={editWeight}
-              onChange={e => setEditWeight(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') applyWeightEdit(); if (e.key === 'Escape') setEditingEdge(null); }}
-              autoFocus
-              style={{ width: '60px', background: 'var(--bgc)', border: '2px solid var(--ac)', color: 'var(--tp)', borderRadius: '6px', padding: '4px 8px', fontFamily: 'JetBrains Mono', fontSize: '0.8rem', outline: 'none' }}
-            />
+            <NumberStepper value={editWeight} onChange={setEditWeight} min={1} max={99} width={84} ariaLabel="Edge weight" onEnter={applyWeightEdit} />
             <button onClick={applyWeightEdit} style={{ marginLeft: '4px', background: 'var(--ag)', border: 'none', borderRadius: '4px', padding: '4px 8px', cursor: 'pointer', fontSize: '0.7rem' }}>✓</button>
             <button onClick={() => setEditingEdge(null)} style={{ marginLeft: '2px', background: 'var(--br)', border: 'none', borderRadius: '4px', padding: '4px 8px', cursor: 'pointer', fontSize: '0.7rem', color: 'var(--ts)' }}>✕</button>
           </div>

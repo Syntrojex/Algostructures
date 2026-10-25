@@ -1,3 +1,4 @@
+import NumberStepper from '../NumberStepper';
 import { useMemo, useState } from 'react';
 
 const CURVES = [
@@ -54,7 +55,7 @@ export default function ComplexityChart() {
       <div className="viz-panel-title">📈 Big O Complexity Chart</div>
       <div className="custom-input-row">
         <label>Input size n:</label>
-        <input className="viz-input" type="number" min={2} max={200} value={nText} onChange={e => setNText(e.target.value)} style={{ width: 80 }} />
+        <NumberStepper value={nText} onChange={setNText} min={2} max={200} width={92} ariaLabel="Input size n" />
         <input type="range" min={2} max={100} value={Math.min(n, 100)} onChange={e => setNText(e.target.value)} />
         <button className={`viz-btn ${!log ? 'primary' : ''}`} onClick={() => setLog(false)}>Linear scale</button>
         <button className={`viz-btn ${log ? 'primary' : ''}`} onClick={() => setLog(true)}>Log scale</button>

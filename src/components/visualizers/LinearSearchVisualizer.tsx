@@ -1,3 +1,4 @@
+import NumberStepper from '../NumberStepper';
 import { useMemo, useState } from 'react';
 import { StepControls, useStepper } from './useStepper';
 
@@ -41,7 +42,7 @@ export default function LinearSearchVisualizer() {
       {err && <div style={{ color: 'var(--ak)', fontSize: '0.82rem', marginBottom: 6 }}>⚠ {err}</div>}
       <div className="viz-row">
         <label>Target</label>
-        <input className="viz-input" type="number" value={target} onChange={e => setTarget(Number(e.target.value))} style={{ width: 80 }} />
+        <NumberStepper value={String(target)} onChange={v => setTarget(v === '' || v === '-' ? 0 : parseInt(v, 10))} min={-9999} max={9999} width={104} ariaLabel="Target" />
         <button className="viz-btn" onClick={() => setTarget(arr[0])}>First element (best case)</button>
         <button className="viz-btn" onClick={() => setTarget(arr[arr.length - 1])}>Last element</button>
         <button className="viz-btn" onClick={() => setTarget(arr.includes(1000) ? 1001 : 1000)}>Not in array (worst case)</button>

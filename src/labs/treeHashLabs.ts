@@ -253,7 +253,7 @@ public:
 		}
 
 		queue<Node*> q; /*@trav_q*/
-		q.push(root);
+		q.push(root); /*@trav_push*/
 
 
 		while (!q.empty()) /*@trav_while*/
@@ -506,23 +506,26 @@ function runBst(st: BState, opId: string, a: Record<string, number>): LabStep[] 
       S('trav', 'Called traverse() — level order (BFS), unlike inorder/preorder/postorder which are all depth-first.');
       S('trav_empty', `root == nullptr? → ${st.root === null ? 'true' : 'false'}.`);
       if (st.root === null) break;
-      const q: number[] = [st.root];
-      S('trav_q', 'queue<Node*> q; q.push(root) — a queue is what turns a depth-first-shaped recursion into a breadth-first one: siblings get visited before children.', M({ hi: [st.root] }));
+      const q: number[] = [];
+      const Q = (curr: number | null = null, note?: string): Partial<TreeSnap> => ({ queue: { ids: q.slice(), curr, note } });
+      S('trav_q', 'queue<Node*> q; — a brand-new, EMPTY queue is created. Watch the box on the right: it exists only while this function runs.', M({ ...Q() }));
+      q.push(st.root);
+      S('trav_push', 'q.push(root) — the queue is what turns a depth-first-shaped recursion into a breadth-first one: siblings get visited before children.', M({ hi: [st.root], ...Q(null, `push ${N(st.root)}`) }));
       const visited: number[] = [];
       let guard = 0;
-      while (q.length > 0 && guard++ < 30) {
-        S('trav_while', `!q.empty() → true. Queue holds: [${q.map(N).join(', ')}].`, M({ path: visited.slice() }));
+      while (q.length > 0 && guard++ < 60) {
+        S('trav_while', `!q.empty() → true. Queue holds: [${q.map(N).join(', ')}].`, M({ path: visited.slice(), ...Q() }));
         const curr = q.shift()!;
-        S('trav_front', `Node* curr = q.front(); q.pop() → curr is ${N(curr)}.`, M({ hi: [curr], path: visited.slice() }));
+        S('trav_front', `Node* curr = q.front(); q.pop() → curr is ${N(curr)}. It leaves the FRONT of the queue.`, M({ hi: [curr], path: visited.slice(), ...Q(curr, `pop ${N(curr)}`) }));
         visited.push(curr);
-        S('trav_print', `cout << curr->data → printed ${N(curr)}.`, M({ hi: [curr], path: visited.slice() }), `${N(curr)}`, true);
-        if (st.nodes[curr].l !== null) { q.push(st.nodes[curr].l!); S('trav_left', `Left child (${N(st.nodes[curr].l!)}) exists → enqueued.`, M({ hi: [st.nodes[curr].l!] })); }
-        else S('trav_left', 'No left child.');
-        if (st.nodes[curr].r !== null) { q.push(st.nodes[curr].r!); S('trav_right', `Right child (${N(st.nodes[curr].r!)}) exists → enqueued.`, M({ hi: [st.nodes[curr].r!] })); }
-        else S('trav_right', 'No right child.');
+        S('trav_print', `cout << curr->data → printed ${N(curr)}.`, M({ hi: [curr], path: visited.slice(), ...Q(curr) }), `${N(curr)}`, true);
+        if (st.nodes[curr].l !== null) { const l = st.nodes[curr].l!; q.push(l); S('trav_left', `Left child (${N(l)}) exists → q.push → joins the BACK of the queue.`, M({ hi: [curr, l], path: visited.slice(), ...Q(curr, `push ${N(l)}`) })); }
+        else S('trav_left', 'No left child.', M({ hi: [curr], path: visited.slice(), ...Q(curr) }));
+        if (st.nodes[curr].r !== null) { const r = st.nodes[curr].r!; q.push(r); S('trav_right', `Right child (${N(r)}) exists → q.push → joins the BACK of the queue.`, M({ hi: [curr, r], path: visited.slice(), ...Q(curr, `push ${N(r)}`) })); }
+        else S('trav_right', 'No right child.', M({ hi: [curr], path: visited.slice(), ...Q(curr) }));
       }
-      S('trav_while', '!q.empty() → false. Every node visited exactly once, level by level.', M({ path: visited.slice() }));
-      S('trav_done', 'Level-order traversal complete.');
+      S('trav_while', '!q.empty() → false. The queue is empty, so every node was visited exactly once, level by level.', M({ path: visited.slice(), ...Q() }));
+      S('trav_done', 'traverse() returns — the local queue q is destroyed, so its box disappears.', M({ path: visited.slice() }));
       break;
     }
 
@@ -616,8 +619,51 @@ export const bstLab: Lab = {
 /* ══════════════════════════════════════════════════════════════════════════
    MIN HEAP
    ══════════════════════════════════════════════════════════════════════════ */
-const heap = parseCode(`
-class MinHeap
+const heapSource = (mx: boolean) => {
+  const CLS = mx ? 'MaxHeap' : 'MinHeap', EXT = mx ? 'extractMax' : 'extractMin', GET = mx ? 'getMax' : 'getMin';
+  const EV = mx ? 'maxValue' : 'minValue', XT = mx ? 'largest' : 'smallest';
+  const UP = mx ? '<' : '>', DN = mx ? '>' : '<';
+  const MN = mx ? 'max' : 'min', MNW = mx ? 'maximum' : 'minimum', MNC = mx ? 'Maximum' : 'Minimum', OPP = mx ? 'MINIMUM' : 'MAXIMUM';
+  const dirSort = (name: string, label: string) => `
+	// ${label} — this literally IS Heap Sort: repeatedly extract the
+	// ${MN} until the heap is empty. NOTE: this consumes the heap.
+	void ${name}() /*@dir*/
+	{
+		while (size > 0) /*@dir_while*/
+		{
+			cout << ${EXT}() << " "; /*@dir_call*/
+		}
+
+		cout << endl; /*@dir_done*/
+	}
+`;
+  const bufSort = (name: string, label: string, how: string) => `
+	// ${label} — extract ${how} (as above), then reverse the
+	// result; a ${CLS} has no O(log n) way to pull the ${OPP} each time.
+	void ${name}() /*@buf*/
+	{
+		int result[64]; /*@buf_init*/
+		int n = 0;
+
+		while (size > 0) /*@buf_while*/
+		{
+			result[n] = ${EXT}(); /*@buf_call*/
+			n++;
+		}
+
+		for (int i = n - 1; i >= 0; i--) /*@buf_print*/
+		{
+			cout << result[i] << " ";
+		}
+
+		cout << endl; /*@buf_done*/
+	}
+`;
+  const sorts = mx
+    ? bufSort('sortAscending', 'Sort Ascending', 'descending') + dirSort('sortDescending', 'Sort Descending')
+    : dirSort('sortAscending', 'Sort Ascending') + bufSort('sortDescending', 'Sort Descending', 'ascending');
+  return parseCode(`
+class ${CLS}
 {
 private:
 	int* arr;
@@ -641,7 +687,7 @@ private:
 
 	void heapifyUp(int i) /*@up*/
 	{
-		while (i > 0 && arr[parent(i)] > arr[i]) /*@up_while*/
+		while (i > 0 && arr[parent(i)] ${UP} arr[i]) /*@up_while*/
 		{
 			swap(arr[i], arr[parent(i)]); /*@up_swap*/
 			i = parent(i); /*@up_move*/
@@ -650,29 +696,29 @@ private:
 
 	void heapifyDown(int i) /*@down*/
 	{
-		int smallest = i; /*@down_init*/
+		int ${XT} = i; /*@down_init*/
 		int l = leftChild(i);
 		int r = rightChild(i);
 
-		if (l < size && arr[l] < arr[smallest]) /*@down_l*/
+		if (l < size && arr[l] ${DN} arr[${XT}]) /*@down_l*/
 		{
-			smallest = l;
+			${XT} = l;
 		}
 
-		if (r < size && arr[r] < arr[smallest]) /*@down_r*/
+		if (r < size && arr[r] ${DN} arr[${XT}]) /*@down_r*/
 		{
-			smallest = r;
+			${XT} = r;
 		}
 
-		if (smallest != i) /*@down_check*/
+		if (${XT} != i) /*@down_check*/
 		{
-			swap(arr[i], arr[smallest]); /*@down_swap*/
-			heapifyDown(smallest); /*@down_rec*/
+			swap(arr[i], arr[${XT}]); /*@down_swap*/
+			heapifyDown(${XT}); /*@down_rec*/
 		}
 	}
 
 public:
-	MinHeap(int capacity)
+	${CLS}(int capacity)
 	{
 		this->capacity = capacity;
 		arr = new int[capacity];
@@ -694,8 +740,8 @@ public:
 		heapifyUp(size - 1); /*@ins_up*/
 	}
 
-	// Extract Minimum
-	int extractMin() /*@ext*/
+	// Extract ${MNC}
+	int ${EXT}() /*@ext*/
 	{
 		if (size == 0) /*@ext_empty*/
 		{
@@ -703,17 +749,17 @@ public:
 			return -1;
 		}
 
-		int minValue = arr[0]; /*@ext_read*/
+		int ${EV} = arr[0]; /*@ext_read*/
 
 		arr[0] = arr[size - 1]; /*@ext_move*/
 		size--;
 
 		heapifyDown(0); /*@ext_down*/
 
-		return minValue; /*@ext_ret*/
+		return ${EV}; /*@ext_ret*/
 	}
 
-	int getMin() /*@get*/
+	int ${GET}() /*@get*/
 	{
 		if (size == 0)
 		{
@@ -730,11 +776,11 @@ public:
 		insert(value); /*@is_call*/
 	}
 
-	// Remove from Start — identical to extractMin(); index 0 (the "start" of
-	// the array) is always the min in a MinHeap.
+	// Remove from Start — identical to ${EXT}(); index 0 (the "start" of
+	// the array) is always the ${MN} in a ${CLS}.
 	int removeAtStart() /*@rs*/
 	{
-		return extractMin(); /*@rs_call*/
+		return ${EXT}(); /*@rs_call*/
 	}
 
 	// Remove from End — removes the LAST array slot directly. No heapify is
@@ -779,7 +825,7 @@ public:
 	}
 
 	// Update at Start — replace the root; it can only need to SINK, since it
-	// was already the minimum of everything below it.
+	// was already the ${MNW} of everything below it.
 	void updateAtStart(int value) /*@ust*/
 	{
 		if (size == 0) /*@ust_check*/
@@ -823,7 +869,7 @@ public:
 	}
 
 	// Search — a heap gives NO better than linear search; only the root is
-	// guaranteed to be the min, nothing else is ordered.
+	// guaranteed to be the ${MN}, nothing else is ordered.
 	int search(int value) /*@se*/
 	{
 		for (int i = 0; i < size; i++) /*@se_loop*/
@@ -848,40 +894,7 @@ public:
 
 		cout << endl; /*@tv_done*/
 	}
-
-	// Sort Ascending — this literally IS Heap Sort: repeatedly extract the
-	// min until the heap is empty. NOTE: this consumes the heap.
-	void sortAscending() /*@sasc*/
-	{
-		while (size > 0) /*@sasc_while*/
-		{
-			cout << extractMin() << " "; /*@sasc_call*/
-		}
-
-		cout << endl; /*@sasc_done*/
-	}
-
-	// Sort Descending — extract ascending (as above), then reverse the
-	// result; a MinHeap has no O(log n) way to pull the MAXIMUM each time.
-	void sortDescending() /*@sdesc*/
-	{
-		int result[64]; /*@sdesc_init*/
-		int n = 0;
-
-		while (size > 0) /*@sdesc_while*/
-		{
-			result[n] = extractMin(); /*@sdesc_call*/
-			n++;
-		}
-
-		for (int i = n - 1; i >= 0; i--) /*@sdesc_print*/
-		{
-			cout << result[i] << " ";
-		}
-
-		cout << endl; /*@sdesc_done*/
-	}
-
+${sorts}
 	// Frequency Count — a heap (unlike a BST) allows duplicate values
 	void frequencyCount() /*@freq*/
 	{
@@ -919,13 +932,17 @@ public:
 		cout << endl; /*@disp_end*/
 	}
 
-	~MinHeap()
+	~${CLS}()
 	{
 		delete[] arr;
 		arr = nullptr;
 	}
 };
 `);
+};
+const heap = heapSource(false);
+const heapMax = heapSource(true);
+
 
 interface HState { arr: (number | null)[]; size: number; capacity: number; }
 
@@ -945,16 +962,25 @@ const heapSnap = (st: HState): TreeSnap => {
   };
 };
 
-function runHeap(st: HState, opId: string, a: Record<string, number>): LabStep[] {
-  const { steps, S } = stepper(heap.marks, () => heapSnap(st));
+function runHeap(mx: boolean, marks: Record<string, number>, st: HState, rawOp: string, a: Record<string, number>): LabStep[] {
+  const { steps, S } = stepper(marks, () => heapSnap(st));
+  // the Max heap runs the very same algorithm with every comparison flipped — only the wording and the operation ids differ
+  const opId = rawOp === 'extractMax' ? 'extractMin' : rawOp === 'getMax' ? 'getMin' : rawOp;
+  const EXT = mx ? 'extractMax' : 'extractMin', GET = mx ? 'getMax' : 'getMin';
+  const MN = mx ? 'max' : 'min', MNW = mx ? 'maximum' : 'minimum', XT = mx ? 'largest' : 'smallest', W = mx ? 'larger' : 'smaller';
+  const WS = mx ? 'LARGER' : 'SMALLER', WOTHER = mx ? 'smaller' : 'larger', WSTILL = mx ? 'larger still' : 'smaller still';
+  const UP = mx ? '<' : '>', NOTUP = mx ? '>=' : '<=', GE = mx ? '≥' : '≤';
+  const CLS_NAME = mx ? 'MaxHeap' : 'MinHeap';
+  const worse = (p: number, c: number) => (mx ? p < c : p > c);        // parent is on the wrong side of its child → swap upward
+  const better = (c: number, cur: number) => (mx ? c > cur : c < cur); // child belongs above the current candidate
   const M = (p: Partial<TreeSnap>) => p as Partial<TreeSnap>;
   const parent = (i: number) => Math.floor((i - 1) / 2);
 
   const doHeapifyUp = (start: number) => {
-    S('up', `heapifyUp(${start}) — bubble it upwards until the parent is smaller.`, M({ hi: [start], arrayHi: [start] }));
+    S('up', `heapifyUp(${start}) — bubble it upwards until the parent is ${W}.`, M({ hi: [start], arrayHi: [start] }));
     let i = start;
-    while (i > 0 && (st.arr[parent(i)] as number) > (st.arr[i] as number)) {
-      S('up_while', `i > 0 && arr[parent(${i})] (${st.arr[parent(i)]}) > arr[${i}] (${st.arr[i]}) → true.`, M({ hi: [i, parent(i)], arrayHi: [i, parent(i)] }));
+    while (i > 0 && worse(st.arr[parent(i)] as number, st.arr[i] as number)) {
+      S('up_while', `i > 0 && arr[parent(${i})] (${st.arr[parent(i)]}) ${UP} arr[${i}] (${st.arr[i]}) → true.`, M({ hi: [i, parent(i)], arrayHi: [i, parent(i)] }));
       const t = st.arr[i]; st.arr[i] = st.arr[parent(i)]; st.arr[parent(i)] = t;
       S('up_swap', `Swapped arr[${i}] and arr[${parent(i)}].`, M({ hi: [i, parent(i)], arrayHi: [i, parent(i)] }));
       i = parent(i);
@@ -968,12 +994,12 @@ function runHeap(st: HState, opId: string, a: Record<string, number>): LabStep[]
     const rec = (i: number) => {
       let smallest = i;
       const l = 2 * i + 1, r = 2 * i + 2;
-      S('down_init', `smallest = ${i}, left = ${l}, right = ${r}.`, M({ hi: [i], arrayHi: [i] }));
-      if (l < st.size && (st.arr[l] as number) < (st.arr[smallest] as number)) { smallest = l; S('down_l', `Left child ${st.arr[l]} is smaller → smallest = ${l}.`, M({ hi: [i, l], arrayHi: [i, l] })); }
+      S('down_init', `${XT} = ${i}, left = ${l}, right = ${r}.`, M({ hi: [i], arrayHi: [i] }));
+      if (l < st.size && better(st.arr[l] as number, st.arr[smallest] as number)) { smallest = l; S('down_l', `Left child ${st.arr[l]} is ${W} → ${XT} = ${l}.`, M({ hi: [i, l], arrayHi: [i, l] })); }
       else S('down_l', `Left child ${l < st.size ? String(st.arr[l]) : 'does not exist'} — no change.`, M({ hi: [i], arrayHi: [i] }));
-      if (r < st.size && (st.arr[r] as number) < (st.arr[smallest] as number)) { smallest = r; S('down_r', `Right child ${st.arr[r]} is smaller still → smallest = ${r}.`, M({ hi: [i, r], arrayHi: [i, r] })); }
+      if (r < st.size && better(st.arr[r] as number, st.arr[smallest] as number)) { smallest = r; S('down_r', `Right child ${st.arr[r]} is ${WSTILL} → ${XT} = ${r}.`, M({ hi: [i, r], arrayHi: [i, r] })); }
       else S('down_r', `Right child ${r < st.size ? String(st.arr[r]) : 'does not exist'} — no change.`, M({ hi: [i], arrayHi: [i] }));
-      S('down_check', `smallest (${smallest}) != i (${i})? → ${smallest !== i}.`, M({ hi: [i], arrayHi: [i] }));
+      S('down_check', `${XT} (${smallest}) != i (${i})? → ${smallest !== i}.`, M({ hi: [i], arrayHi: [i] }));
       if (smallest !== i) {
         const t = st.arr[i]; st.arr[i] = st.arr[smallest]; st.arr[smallest] = t;
         S('down_swap', `Swapped arr[${i}] and arr[${smallest}].`, M({ hi: [i, smallest], arrayHi: [i, smallest] }));
@@ -995,27 +1021,27 @@ function runHeap(st: HState, opId: string, a: Record<string, number>): LabStep[]
       S('ins_place', `arr[${st.size - 1}] = ${v}, size++ → ${st.size}. The value goes in the first free array slot, which is the next position in level order. The heap property is probably broken right now — that is expected.`,
         M({ hi: [st.size - 1], arrayHi: [st.size - 1] }));
       let i = st.size - 1;
-      S('ins_up', `heapifyUp(${i}) — bubble it upwards until the parent is smaller.`, M({ hi: [i], arrayHi: [i] }));
-      while (i > 0 && (st.arr[parent(i)] as number) > (st.arr[i] as number)) {
-        S('up_while', `i > 0 && arr[parent(${i})] (${st.arr[parent(i)]}) > arr[${i}] (${st.arr[i]}) → true. The child is smaller than its parent, so a min-heap cannot allow this.`,
+      S('ins_up', `heapifyUp(${i}) — bubble it upwards until the parent is ${W}.`, M({ hi: [i], arrayHi: [i] }));
+      while (i > 0 && worse(st.arr[parent(i)] as number, st.arr[i] as number)) {
+        S('up_while', `i > 0 && arr[parent(${i})] (${st.arr[parent(i)]}) ${UP} arr[${i}] (${st.arr[i]}) → true. The child is ${W} than its parent, so a ${MN}-heap cannot allow this.`,
           M({ hi: [i, parent(i)], arrayHi: [i, parent(i)] }));
         const t = st.arr[i]; st.arr[i] = st.arr[parent(i)]; st.arr[parent(i)] = t;
         S('up_swap', `Swapped arr[${i}] and arr[${parent(i)}].`, M({ hi: [i, parent(i)], arrayHi: [i, parent(i)] }));
         i = parent(i);
         S('up_move', `i = parent(i) = ${i}. Keep climbing.`, M({ hi: [i], arrayHi: [i] }));
       }
-      S('up_while', i === 0 ? 'i == 0 — we reached the root, nothing above it.' : `arr[parent(${i})] (${st.arr[parent(i)]}) <= arr[${i}] (${st.arr[i]}) — the heap property holds again. Stop.`,
+      S('up_while', i === 0 ? 'i == 0 — we reached the root, nothing above it.' : `arr[parent(${i})] (${st.arr[parent(i)]}) ${NOTUP} arr[${i}] (${st.arr[i]}) — the heap property holds again. Stop.`,
         M({ hi: [i], arrayHi: [i] }));
       S('ins_up', `Done. At most one swap per level → O(log n).`, M({}));
       break;
     }
 
     case 'extractMin': {
-      S('ext', 'Called extractMin().');
+      S('ext', `Called ${EXT}().`);
       S('ext_empty', `size == 0? → ${st.size === 0 ? 'true' : 'false'}.`);
       if (st.size === 0) { S('ext_msg', 'Nothing to extract.', undefined, 'Heap is Empty!'); break; }
       const min = st.arr[0];
-      S('ext_read', `int minValue = arr[0] → ${min}. The root of a min-heap is always the smallest element, so this read is O(1).`, M({ hi: [0], arrayHi: [0] }));
+      S('ext_read', `int ${MN}Value = arr[0] → ${min}. The root of a ${MN}-heap is always the ${XT} element, so this read is O(1).`, M({ hi: [0], arrayHi: [0] }));
       st.arr[0] = st.arr[st.size - 1];
       st.size--;
       S('ext_move', `arr[0] = arr[size - 1], size-- → ${st.size}. The LAST element is moved to the root. Why the last one? Because it is the only removal that keeps the tree complete (no gaps in the array).`,
@@ -1024,36 +1050,36 @@ function runHeap(st: HState, opId: string, a: Record<string, number>): LabStep[]
       const down = (i: number) => {
         let smallest = i;
         const l = 2 * i + 1, r = 2 * i + 2;
-        S('down_init', `heapifyDown(${i}): smallest = ${i}, left = ${l}, right = ${r}.`, M({ hi: [i], arrayHi: [i] }));
-        if (l < st.size && (st.arr[l] as number) < (st.arr[smallest] as number)) {
+        S('down_init', `heapifyDown(${i}): ${XT} = ${i}, left = ${l}, right = ${r}.`, M({ hi: [i], arrayHi: [i] }));
+        if (l < st.size && better(st.arr[l] as number, st.arr[smallest] as number)) {
           smallest = l;
-          S('down_l', `Left child ${st.arr[l]} is smaller → smallest = ${l}.`, M({ hi: [i, l], arrayHi: [i, l] }));
+          S('down_l', `Left child ${st.arr[l]} is ${W} → ${XT} = ${l}.`, M({ hi: [i, l], arrayHi: [i, l] }));
         } else {
           S('down_l', `Left child ${l < st.size ? String(st.arr[l]) : 'does not exist'} — no change.`, M({ hi: [i], arrayHi: [i] }));
         }
-        if (r < st.size && (st.arr[r] as number) < (st.arr[smallest] as number)) {
+        if (r < st.size && better(st.arr[r] as number, st.arr[smallest] as number)) {
           smallest = r;
-          S('down_r', `Right child ${st.arr[r]} is smaller still → smallest = ${r}.`, M({ hi: [i, r], arrayHi: [i, r] }));
+          S('down_r', `Right child ${st.arr[r]} is ${WSTILL} → ${XT} = ${r}.`, M({ hi: [i, r], arrayHi: [i, r] }));
         } else {
           S('down_r', `Right child ${r < st.size ? String(st.arr[r]) : 'does not exist'} — no change.`, M({ hi: [i], arrayHi: [i] }));
         }
-        S('down_check', `smallest (${smallest}) != i (${i})? → ${smallest !== i ? 'true, swap needed' : 'false — this subtree is a valid heap, stop'}.`, M({ hi: [i], arrayHi: [i] }));
+        S('down_check', `${XT} (${smallest}) != i (${i})? → ${smallest !== i ? 'true, swap needed' : 'false — this subtree is a valid heap, stop'}.`, M({ hi: [i], arrayHi: [i] }));
         if (smallest !== i) {
           const t = st.arr[i]; st.arr[i] = st.arr[smallest]; st.arr[smallest] = t;
-          S('down_swap', `Swapped arr[${i}] and arr[${smallest}]. Always swap with the SMALLER child — swapping with the larger one would break the heap on the other side.`, M({ hi: [i, smallest], arrayHi: [i, smallest] }));
+          S('down_swap', `Swapped arr[${i}] and arr[${smallest}]. Always swap with the ${WS} child — swapping with the ${WOTHER} one would break the heap on the other side.`, M({ hi: [i, smallest], arrayHi: [i, smallest] }));
           S('down_rec', `heapifyDown(${smallest}) — keep sinking.`, M({ hi: [smallest], arrayHi: [smallest] }));
           down(smallest);
         }
       };
       down(0);
-      S('ext_ret', `return ${min}. One sink per level → O(log n).`, M({}), `extractMin() returned ${min}`);
+      S('ext_ret', `return ${min}. One sink per level → O(log n).`, M({}), `${EXT}() returned ${min}`);
       break;
     }
 
     case 'getMin': {
-      S('get', 'Called getMin().');
-      if (st.size === 0) { S('get_ret', 'Empty heap.', undefined, 'getMin() returned -1'); break; }
-      S('get_ret', `return arr[0] → ${st.arr[0]}. O(1) — no searching, the minimum is structurally guaranteed to sit at index 0.`, M({ hi: [0], arrayHi: [0] }), `getMin() returned ${st.arr[0]}`);
+      S('get', `Called ${GET}().`);
+      if (st.size === 0) { S('get_ret', 'Empty heap.', undefined, `${GET}() returned -1`); break; }
+      S('get_ret', `return arr[0] → ${st.arr[0]}. O(1) — no searching, the ${MNW} is structurally guaranteed to sit at index 0.`, M({ hi: [0], arrayHi: [0] }), `${GET}() returned ${st.arr[0]}`);
       break;
     }
 
@@ -1070,7 +1096,7 @@ function runHeap(st: HState, opId: string, a: Record<string, number>): LabStep[]
 
     case 'removeAtStart': {
       S('rs', 'Called removeAtStart().');
-      S('rs_call', 'removeAtStart delegates straight to extractMin() — index 0 (the "start" of the array) is always the minimum.');
+      S('rs_call', `removeAtStart delegates straight to ${EXT}() — index 0 (the "start" of the array) is always the ${MNW}.`);
       if (st.size === 0) { S('ext_msg', 'Empty.', undefined, 'Heap is Empty!'); break; }
       const min = st.arr[0];
       st.arr[0] = st.arr[st.size - 1]; st.size--;
@@ -1119,7 +1145,7 @@ function runHeap(st: HState, opId: string, a: Record<string, number>): LabStep[]
       S('ust_check', `size == 0? → ${st.size === 0 ? 'true' : 'false'}.`);
       if (st.size === 0) { S('ust_msg', 'Empty.', undefined, 'Heap is Empty!'); break; }
       st.arr[0] = a.value;
-      S('ust_set', `arr[0] = ${a.value}. The root can only ever need to SINK — it was already ≤ everything below it.`, M({ hi: [0], arrayHi: [0] }));
+      S('ust_set', `arr[0] = ${a.value}. The root can only ever need to SINK — it was already ${GE} everything below it.`, M({ hi: [0], arrayHi: [0] }));
       doHeapifyDown(0);
       break;
     }
@@ -1170,40 +1196,36 @@ function runHeap(st: HState, opId: string, a: Record<string, number>): LabStep[]
       break;
     }
 
-    case 'sortAscending': {
-      S('sasc', 'Called sortAscending() — this literally IS Heap Sort. NOTE: this consumes the heap, exactly like the real algorithm.');
-      const out: number[] = [];
-      let guard = 0;
-      while (st.size > 0 && guard++ < 30) {
-        S('sasc_while', `size (${st.size}) > 0 → true.`);
-        const min = st.arr[0];
-        st.arr[0] = st.arr[st.size - 1]; st.size--;
-        doHeapifyDown(0);
-        out.push(min as number);
-        S('sasc_call', `extractMin() → ${min}. Extracting from a min-heap in order, one at a time, is exactly what "ascending sort" means.`, undefined, `${min}`);
-      }
-      S('sasc_while', 'size == 0 — heap is now empty.');
-      S('sasc_done', 'Sorted ascending — every value was already printed as it was extracted. Like the real heap sort, this consumed the heap: press “Reset object” to get the starting heap back, or insert new values.');
-      break;
-    }
-
+    case 'sortAscending':
     case 'sortDescending': {
-      S('sdesc', 'Called sortDescending().');
-      S('sdesc_init', 'A MinHeap has no O(log n) way to pull the MAXIMUM each time, so: extract everything ascending into a buffer, then print it backwards.');
-      const buf: number[] = [];
-      let guard = 0;
-      while (st.size > 0 && guard++ < 30) {
-        S('sdesc_while', `size (${st.size}) > 0 → true.`);
-        const min = st.arr[0];
-        st.arr[0] = st.arr[st.size - 1]; st.size--;
-        doHeapifyDown(0);
-        buf.push(min as number);
-        S('sdesc_call', `result[${buf.length - 1}] = extractMin() → ${min}.`);
+      const asc = opId === 'sortAscending';
+      const name = asc ? 'sortAscending' : 'sortDescending';
+      /* a MinHeap yields ascending order straight out of extractMin(); a MaxHeap yields descending. The other direction needs a buffer. */
+      const direct = asc !== mx;
+      const consume = (note: (v: number) => string) => {
+        let guard = 0;
+        while (st.size > 0 && guard++ < 64) {
+          S(direct ? 'dir_while' : 'buf_while', `size (${st.size}) > 0 → true.`);
+          const top = st.arr[0] as number;
+          st.arr[0] = st.arr[st.size - 1]; st.size--;
+          doHeapifyDown(0);
+          S(direct ? 'dir_call' : 'buf_call', note(top), undefined, direct ? `${top}` : undefined, direct ? true : undefined);
+        }
+        S(direct ? 'dir_while' : 'buf_while', 'size == 0 — heap is now empty.');
+      };
+      if (direct) {
+        S('dir', `Called ${name}() — this literally IS Heap Sort. NOTE: this consumes the heap, exactly like the real algorithm.`);
+        consume(v => `${EXT}() → ${v}. Extracting from a ${MN}-heap one at a time gives the values in ${asc ? 'ascending' : 'descending'} order — exactly what "${asc ? 'ascending' : 'descending'} sort" means.`);
+        S('dir_done', `Sorted ${asc ? 'ascending' : 'descending'} — every value was already printed as it was extracted. Like the real heap sort, this consumed the heap: press “Reset object” to get the starting heap back, or insert new values.`);
+      } else {
+        S('buf', `Called ${name}().`);
+        S('buf_init', `A ${CLS_NAME} has no O(log n) way to pull the ${asc ? 'MINIMUM' : 'MAXIMUM'} each time, so: extract everything ${asc ? 'descending' : 'ascending'} into a buffer, then print it backwards.`);
+        const buf: number[] = [];
+        consume(v => { buf.push(v); return `result[${buf.length - 1}] = ${EXT}() → ${v}.`; });
+        const rev = buf.slice().reverse();
+        S('buf_print', 'for (i = n-1; i >= 0; i--) — walking the buffer backwards turns ' + (asc ? 'descending into ascending' : 'ascending into descending') + '.', undefined, rev.join(' '));
+        S('buf_done', `Sorted ${asc ? 'ascending' : 'descending'}. This consumed the heap (the real algorithm does too) — press “Reset object” for the starting heap, or insert new values.`);
       }
-      S('sdesc_while', 'size == 0 — heap is now empty.');
-      const rev = buf.slice().reverse();
-      S('sdesc_print', 'for (i = n-1; i >= 0; i--) — walking the buffer backwards turns ascending into descending.', undefined, rev.join(' '));
-      S('sdesc_done', 'Sorted descending. This consumed the heap (the real algorithm does too) — press “Reset object” for the starting heap, or insert new values.');
       break;
     }
 
@@ -1243,35 +1265,54 @@ function runHeap(st: HState, opId: string, a: Record<string, number>): LabStep[]
   return steps;
 }
 
+const heapOps = (mx: boolean): Lab['ops'] => {
+  const EXT = mx ? 'extractMax' : 'extractMin', GET = mx ? 'getMax' : 'getMin', MN = mx ? 'max' : 'min';
+  return [
+    { id: 'insert', label: 'Insert (heapify up)', sig: 'void insert(int value)', params: [{ name: 'value', label: 'value', def: mx ? 95 : 5 }], big: 'O(log n)' },
+    { id: EXT, label: `Extract ${MN} (heapify down)`, sig: `int ${EXT}()`, params: [], big: 'O(log n)' },
+    { id: GET, label: `Get ${MN}`, sig: `int ${GET}()`, params: [], big: 'O(1)' },
+    { id: 'insertAtEnd', label: 'Insert at end (= insert)', sig: 'void insertAtEnd(int value)', params: [{ name: 'value', label: 'value', def: 12 }], big: 'O(log n)' },
+    { id: 'removeAtStart', label: `Remove from start (= ${EXT})`, sig: 'int removeAtStart()', params: [], big: 'O(log n)' },
+    { id: 'removeAtEnd', label: 'Remove from end', sig: 'int removeAtEnd()', params: [], big: 'O(1)' },
+    { id: 'removeAtPosition', label: 'Remove at position', sig: 'int removeAtPosition(int pos)', params: [{ name: 'pos', label: 'pos', def: 2 }], big: 'O(log n)' },
+    { id: 'updateAtStart', label: 'Update at start (root)', sig: 'void updateAtStart(int value)', params: [{ name: 'value', label: 'value', def: mx ? 55 : 3 }], big: 'O(log n)' },
+    { id: 'updateAtPosition', label: mx ? 'Update at position (increase-key)' : 'Update at position (decrease-key)', sig: 'void updateAtPosition(int pos, int value)', params: [{ name: 'pos', label: 'pos', def: 3 }, { name: 'value', label: 'value', def: mx ? 99 : 1 }], big: 'O(log n)' },
+    { id: 'updateAtEnd', label: 'Update at end (last leaf)', sig: 'void updateAtEnd(int value)', params: [{ name: 'value', label: 'value', def: 50 }], big: 'O(log n)' },
+    { id: 'search', label: 'Search', sig: 'int search(int value)', params: [{ name: 'value', label: 'value', def: mx ? 60 : 25 }], big: 'O(n)' },
+    { id: 'traverse', label: 'Traverse (array order)', sig: 'void traverse()', params: [], big: 'O(n)' },
+    { id: 'sortAscending', label: mx ? 'Sort ascending' : 'Sort ascending (Heap Sort)', sig: 'void sortAscending()', params: [], big: 'O(n log n)' },
+    { id: 'sortDescending', label: mx ? 'Sort descending (Heap Sort)' : 'Sort descending', sig: 'void sortDescending()', params: [], big: 'O(n log n)' },
+    { id: 'frequencyCount', label: 'Frequency count', sig: 'void frequencyCount()', params: [], big: 'O(n²)' },
+    { id: 'display', label: 'Display (level order)', sig: 'void display()', params: [], big: 'O(n)' },
+  ];
+};
+
 export const heapLab: Lab = {
   id: 'heap',
   title: 'Min Heap Class',
   icon: '⛰️',
   className: 'MinHeap',
-  blurb: 'A tree with no pointers. The array IS the tree, and the index arithmetic (2i+1, 2i+2) is the only link between them — shown side by side so you can see both views move together.',
+  blurb: 'A tree with no pointers. The array IS the tree, and the index arithmetic (2i+1, 2i+2) is the only link between them — shown side by side so you can see both views move together. The smallest value always sits at the root.',
   code: heap.code,
   marks: heap.marks,
-  ops: [
-    { id: 'insert', label: 'Insert (heapify up)', sig: 'void insert(int value)', params: [{ name: 'value', label: 'value', def: 5 }], big: 'O(log n)' },
-    { id: 'extractMin', label: 'Extract min (heapify down)', sig: 'int extractMin()', params: [], big: 'O(log n)' },
-    { id: 'getMin', label: 'Get min', sig: 'int getMin()', params: [], big: 'O(1)' },
-    { id: 'insertAtEnd', label: 'Insert at end (= insert)', sig: 'void insertAtEnd(int value)', params: [{ name: 'value', label: 'value', def: 12 }], big: 'O(log n)' },
-    { id: 'removeAtStart', label: 'Remove from start (= extractMin)', sig: 'int removeAtStart()', params: [], big: 'O(log n)' },
-    { id: 'removeAtEnd', label: 'Remove from end', sig: 'int removeAtEnd()', params: [], big: 'O(1)' },
-    { id: 'removeAtPosition', label: 'Remove at position', sig: 'int removeAtPosition(int pos)', params: [{ name: 'pos', label: 'pos', def: 2 }], big: 'O(log n)' },
-    { id: 'updateAtStart', label: 'Update at start (root)', sig: 'void updateAtStart(int value)', params: [{ name: 'value', label: 'value', def: 3 }], big: 'O(log n)' },
-    { id: 'updateAtPosition', label: 'Update at position (decrease-key)', sig: 'void updateAtPosition(int pos, int value)', params: [{ name: 'pos', label: 'pos', def: 3 }, { name: 'value', label: 'value', def: 1 }], big: 'O(log n)' },
-    { id: 'updateAtEnd', label: 'Update at end (last leaf)', sig: 'void updateAtEnd(int value)', params: [{ name: 'value', label: 'value', def: 50 }], big: 'O(log n)' },
-    { id: 'search', label: 'Search', sig: 'int search(int value)', params: [{ name: 'value', label: 'value', def: 25 }], big: 'O(n)' },
-    { id: 'traverse', label: 'Traverse (array order)', sig: 'void traverse()', params: [], big: 'O(n)' },
-    { id: 'sortAscending', label: 'Sort ascending (Heap Sort)', sig: 'void sortAscending()', params: [], big: 'O(n log n)' },
-    { id: 'sortDescending', label: 'Sort descending', sig: 'void sortDescending()', params: [], big: 'O(n log n)' },
-    { id: 'frequencyCount', label: 'Frequency count', sig: 'void frequencyCount()', params: [], big: 'O(n²)' },
-    { id: 'display', label: 'Display (level order)', sig: 'void display()', params: [], big: 'O(n)' },
-  ],
+  ops: heapOps(false),
   init: (): HState => ({ arr: [10, 20, 15, 40, 25, 18, null, null, null, null, null, null, null, null, null], size: 6, capacity: 15 }),
   snapshot: heapSnap,
-  run: runHeap,
+  run: (st: HState, opId: string, a: Record<string, number>) => runHeap(false, heap.marks, st, opId, a),
+};
+
+export const maxHeapLab: Lab = {
+  id: 'maxheap',
+  title: 'Max Heap Class',
+  icon: '🏔️',
+  className: 'MaxHeap',
+  blurb: 'The mirror image of the Min Heap: every parent is LARGER than its children, so the biggest value always sits at the root. Same array-as-a-tree idea, same index arithmetic (2i+1, 2i+2) — only the comparisons are flipped.',
+  code: heapMax.code,
+  marks: heapMax.marks,
+  ops: heapOps(true),
+  init: (): HState => ({ arr: [90, 70, 80, 40, 50, 60, null, null, null, null, null, null, null, null, null], size: 6, capacity: 15 }),
+  snapshot: heapSnap,
+  run: (st: HState, opId: string, a: Record<string, number>) => runHeap(true, heapMax.marks, st, opId, a),
 };
 
 /* ══════════════════════════════════════════════════════════════════════════

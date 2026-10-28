@@ -69,7 +69,21 @@ export interface TreeSnap {
   floating?: number[];        // brand-new nodes that exist in memory but are not linked into the tree yet
   pointers?: boolean;         // draw edges as pointer arrows (BST/AVL); heaps are array-backed, so no arrowheads
   badges?: Record<number, string>;   // small label under a node, e.g. AVL "h2 · +1" (height · balance factor)
+  /** AVL: the STORED height (node->height, only changes when updateHeight runs) and the balance factor the code would compute from it */
+  heights?: Record<number, number>;
+  bfs?: Record<number, number>;
+  bumped?: Record<number, number>;   // node id → change of its stored height in THIS step (e.g. +1) → drawn with a pulse and a flash
   badBadges?: number[];              // nodes whose badge is a warning (an AVL node with |balance factor| > 1)
+  /** Live contents of a std::queue<Node*> (front first). The queue box exists only while this is set:
+      it slides in when the function creates the queue and fades away when the function ends. */
+  queue?: { ids: number[]; curr?: number | null; note?: string };
+  /** AVL rotation teaching overlays */
+  roles?: Record<number, 'z' | 'y' | 'x'>;     // z = unbalanced node, y = its heavy child, x = grandchild on the heavy path
+  moved?: number[];                              // subtree that changes parent during the rotation
+  hotEdges?: [number, number][];                 // parent→child pointers on the heavy path
+  swing?: { up: number; down: number; dir: 'L' | 'R' };   // the two nodes that trade places: they travel along ARCS (a real rotation), slowly
+  spin?: { a: number; b: number; dir: 'L' | 'R' };  // spinning arrow between the two nodes that are about to swap places
+  banner?: { tag: string; title: string; detail: string; rotation?: string; code?: string };   // e.g. tag "LR", title "Left-Right case"
   arrayView?: (number | null)[];  // heaps also show their backing array
   arrayHi?: number[];
 }

@@ -55,7 +55,7 @@ export const GROUPS: VizGroup[] = [
   { key: 'queue',       icon: '🚶', name: 'Queue',                kind: 'ds',   blurb: 'First in, first out — enqueue and dequeue.' },
   { key: 'hashing',     icon: '🗂️', name: 'Hash Table',           kind: 'ds',   blurb: 'Keys, buckets and collisions.' },
   { key: 'trees',       icon: '🌳', name: 'Binary Search Tree',   kind: 'ds',   blurb: 'BST and self-balancing AVL: insert, delete, rotations and every traversal.' },
-  { key: 'heap',        icon: '⛰️', name: 'Heap',                 kind: 'ds',   blurb: 'Heapify up and down, extract-min, heap sort.' },
+  { key: 'heap',        icon: '⛰️', name: 'Heap',                 kind: 'ds',   blurb: 'Min heap and max heap — heapify up and down, extract-min / extract-max, heap sort.' },
 
   { key: 'sorting',     icon: '🔀', name: 'Sorting',              kind: 'algo', blurb: 'Eight sorting algorithms, plus a live race between them.' },
   { key: 'searching',   icon: '🔍', name: 'Searching',            kind: 'algo', blurb: 'Halve the range until you find it.' },
@@ -96,7 +96,8 @@ export const PAGES: VizPage[] = [
   lab('hash-visualizer', 'hashing', 'Hash Table Visualizer', 'Hash table class — hashing, buckets and collision handling.', 'hash'),
   lab('bst-visualizer', 'trees', 'BST Visualizer', 'Binary search tree class — insert, search, delete and every traversal.', 'bst'),
   lab('avl-visualizer', 'trees', 'AVL Visualizer', 'Self-balancing BST class — insert and remove with LL, RR, LR and RL rotations, balance factors on every node.', 'avl'),
-  lab('heap-visualizer', 'heap', 'Heap Visualizer', 'Min-heap class — heapify up and down, extract-min and heap sort.', 'heap'),
+  lab('heap-visualizer', 'heap', 'Min Heap Visualizer', 'Min-heap class — smallest value at the root: heapify up and down, extract-min and heap sort.', 'heap'),
+  lab('max-heap-visualizer', 'heap', 'Max Heap Visualizer', 'Max-heap class — largest value at the root: heapify up and down, extract-max and heap sort.', 'maxheap'),
 
   // ── Algorithms ──
   { key: 'bubble-sort', group: 'sorting', title: 'Bubble Sort', blurb: 'Swap neighbours until the biggest values bubble to the end. O(n²).', spec: { t: 'sort', algo: 'bubble' } },

@@ -25,6 +25,7 @@ const ALIASES: Record<string, string[]> = {
   'bst-visualizer': ['bst', 'binary search tree', 'tree', 'inorder', 'preorder', 'postorder', 'level order', 'traversal'],
   'avl-visualizer': ['avl', 'avl tree', 'balanced tree', 'self balancing', 'rotation', 'rotations', 'left rotation', 'right rotation', 'balance factor', 'll', 'rr', 'lr', 'rl', 'tree'],
   'heap-visualizer': ['heap', 'min heap', 'priority queue', 'heapify', 'extract min'],
+  'max-heap-visualizer': ['heap', 'max heap', 'priority queue', 'heapify', 'extract max'],
   'bubble-sort': ['bubble', 'sorting', 'adjacent swap'],
   'selection-sort': ['selection', 'sorting', 'find minimum'],
   'insertion-sort': ['insertion', 'sorting'],

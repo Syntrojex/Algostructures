@@ -12,6 +12,7 @@ const LOADERS: Record<string, () => Promise<Lab>> = {
   bst: () => import('./treeHashLabs').then(m => m.bstLab),
   avl: () => import('./avlLab').then(m => m.avlLab),
   heap: () => import('./treeHashLabs').then(m => m.heapLab),
+  maxheap: () => import('./treeHashLabs').then(m => m.maxHeapLab),
   hash: () => import('./treeHashLabs').then(m => m.hashLab),
   recursion: () => import('./recursionLab').then(m => m.recursionLab),
 };

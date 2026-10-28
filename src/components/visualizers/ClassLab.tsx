@@ -271,85 +271,233 @@ function ListView({ s }: { s: ListSnap }) {
 }
 
 
-function TreeView({ s }: { s: TreeSnap }) {
-  const layout = useMemo(() => {
+/* ── smooth movement: nodes GLIDE from their old to their new slot, so a rotation is seen as a rotation ── */
+interface TreeFrame { pos: Map<number, { cx: number; cy: number }>; W: number; H: number }
+
+function useTween(target: TreeFrame, ms: number, swing?: TreeSnap['swing']): TreeFrame {
+  const [frame, setFrame] = useState<TreeFrame>(target);
+  const live = useRef<TreeFrame>(target);
+  const raf = useRef(0);
+  useEffect(() => {
+    const from = live.current;
+    const reduce = typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    let same = from.W === target.W && from.H === target.H && from.pos.size === target.pos.size;
+    if (same) target.pos.forEach((to, id) => { const f = from.pos.get(id); if (!f || f.cx !== to.cx || f.cy !== to.cy) same = false; });
+    if (same || ms <= 0 || reduce) { live.current = target; setFrame(target); return; }
+    const t0 = performance.now();
+    const step = (now: number) => {
+      const p = Math.min(1, (now - t0) / ms);
+      const e = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;      // ease in-out
+      const pos = new Map<number, { cx: number; cy: number }>();
+      target.pos.forEach((to, id) => {
+        const f = from.pos.get(id) ?? to;
+        let cx = f.cx + (to.cx - f.cx) * e, cy = f.cy + (to.cy - f.cy) * e;
+        if (swing && (id === swing.up || id === swing.down)) {
+          /* the two nodes that trade places do NOT slide in a straight line: they bulge sideways along an arc,
+             clockwise for a right rotation, anticlockwise for a left one — that is what makes it look like turning */
+          const dx = to.cx - f.cx, dy = to.cy - f.cy, len = Math.hypot(dx, dy) || 1;
+          const amp = Math.min(46, len * 0.5) * Math.sin(Math.PI * e) * (swing.dir === 'R' ? 1 : -1);
+          cx += (dy / len) * amp; cy += (-dx / len) * amp;
+        }
+        pos.set(id, { cx, cy });
+      });
+      const fr = { pos, W: from.W + (target.W - from.W) * e, H: from.H + (target.H - from.H) * e };
+      live.current = fr;
+      setFrame(fr);
+      if (p < 1) raf.current = requestAnimationFrame(step);
+    };
+    raf.current = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf.current);
+  }, [target, ms]);
+  return frame;
+}
+
+/* keeps showing the last value for a moment after it vanishes, so a box can fade OUT instead of just popping away */
+function useGhost<T>(v: T | undefined, ms = 520): { val: T | undefined; leaving: boolean } {
+  const [ghost, setGhost] = useState<T | undefined>(v);
+  useEffect(() => {
+    if (v !== undefined) { setGhost(v); return; }
+    const t = setTimeout(() => setGhost(undefined), ms);
+    return () => clearTimeout(t);
+  }, [v, ms]);
+  return { val: v ?? ghost, leaving: v === undefined && ghost !== undefined };
+}
+
+/* the queue<Node*> used by level-order: its own box, alive only while the function runs */
+function QueueBox({ q, leaving, valueOf }: { q: NonNullable<TreeSnap['queue']>; leaving: boolean; valueOf: (id: number) => number | string }) {
+  return (
+    <div className={`lab-qbox ${leaving ? 'leaving' : 'entering'}`} aria-label="queue state">
+      <div className="lab-qbox-head">
+        <span className="lab-qbox-title">queue&lt;Node*&gt; q</span>
+        <span className="lab-qbox-size">size {q.ids.length}</span>
+      </div>
+      <div className="lab-qbox-lane">
+        <span className="lab-qbox-end front">FRONT<br />(pop here)</span>
+        <div className="lab-qbox-items">
+          {q.ids.length === 0 && <span className="lab-qbox-empty">empty</span>}
+          {q.ids.map((id, i) => (
+            <span key={id} className={`lab-qitem ${i === 0 ? 'is-front' : ''} ${i === q.ids.length - 1 ? 'is-back' : ''}`}>{valueOf(id)}</span>
+          ))}
+        </div>
+        <span className="lab-qbox-end back">BACK<br />(push here)</span>
+      </div>
+      <div className="lab-qbox-foot">
+        <span className="lab-qbox-curr">{q.curr != null ? <>curr = <b>{valueOf(q.curr)}</b></> : <>curr = —</>}</span>
+        {q.note && <span key={q.note} className="lab-qbox-note">{q.note}</span>}
+      </div>
+    </div>
+  );
+}
+
+function TreeView({ s, animMs = 600 }: { s: TreeSnap; animMs?: number }) {
+  const GAP_X = 62, R = 21, PAD = s.heights ? 48 : 34;
+  const GAP_Y = s.heights ? 84 : 68;                                  // AVL needs room for the height label under each node
+  const floating = useMemo(() => (s.floating ?? []).map(id => s.nodes.find(n => n.id === id)).filter((n): n is NonNullable<typeof n> => !!n), [s.floating, s.nodes]);
+
+  const target = useMemo<TreeFrame>(() => {
     const byId = new Map(s.nodes.map(n => [n.id, n]));
-    const pos = new Map<number, { x: number; y: number }>();
-    let col = 0;
-    let maxDepth = 0;
+    const col = new Map<number, { x: number; y: number }>();
+    let c = 0, maxDepth = 0;
+    const seen = new Set<number>();
     const walk = (id: number | null, d: number) => {
-      if (id === null) return;
+      if (id === null || seen.has(id)) return;
       const n = byId.get(id);
       if (!n) return;
+      seen.add(id);
       maxDepth = Math.max(maxDepth, d);
       walk(n.l, d + 1);
-      pos.set(id, { x: col++, y: d });
+      col.set(id, { x: c++, y: d });
       walk(n.r, d + 1);
     };
     walk(s.root, 0);
-    return { pos, cols: Math.max(col, 1), depth: maxDepth };
-  }, [s.nodes, s.root]);
+    const TOP = floating.length ? 78 : 0;                             // room for brand-new, still-unlinked nodes above the tree
+    const pos = new Map<number, { cx: number; cy: number }>();
+    col.forEach((p, id) => pos.set(id, { cx: PAD + p.x * GAP_X, cy: PAD + p.y * GAP_Y + TOP }));
+    const W = Math.max(Math.max(c, 1) * GAP_X + PAD * 2 - GAP_X + R * 2, floating.length * 120 + PAD * 2);
+    const H = (maxDepth + 1) * GAP_Y + PAD + TOP;
+    return { pos, W: Math.max(W, 180), H: Math.max(H, 120) };
+  }, [s.nodes, s.root, floating, GAP_Y]);
 
-  const GAP_X = 62, GAP_Y = 68, R = 21, PAD = 34;
-  const floating = (s.floating ?? []).map(id => s.nodes.find(n => n.id === id)).filter((n): n is NonNullable<typeof n> => !!n);
-  const TOP = floating.length ? 78 : 0;                              // room for brand-new, still-unlinked nodes above the tree
-  const W = Math.max(layout.cols * GAP_X + PAD * 2 - GAP_X + R * 2, floating.length * 120 + PAD * 2);
-  const H = (layout.depth + 1) * GAP_Y + PAD + TOP;
-  const xy = (id: number) => {
-    const p = layout.pos.get(id)!;
-    return { cx: PAD + p.x * GAP_X, cy: PAD + p.y * GAP_Y + TOP };
-  };
+  const fr = useTween(target, s.swing ? Math.max(animMs, 1500) : animMs, s.swing);
+  const at = (id: number) => fr.pos.get(id) ?? target.pos.get(id);
+
   /* an edge is a pointer parent → child: start/end on the circle borders so the arrowhead is visible */
   const edge = (from: number, to: number, key: string) => {
-    const a2 = xy(from), b2 = xy(to);
+    const a2 = at(from), b2 = at(to);
+    if (!a2 || !b2) return null;
     const dx = b2.cx - a2.cx, dy = b2.cy - a2.cy, len = Math.hypot(dx, dy) || 1;
     const ux = dx / len, uy = dy / len;
     const x1 = a2.cx + ux * R, y1 = a2.cy + uy * R;
     const x2 = b2.cx - ux * (R + (s.pointers ? 3 : 0)), y2 = b2.cy - uy * (R + (s.pointers ? 3 : 0));
-    return <line key={key} x1={s.pointers ? x1 : a2.cx} y1={s.pointers ? y1 : a2.cy} x2={s.pointers ? x2 : b2.cx} y2={s.pointers ? y2 : b2.cy} className="lab-tree-edge" markerEnd={s.pointers ? 'url(#lab-tree-ah)' : undefined} />;
+    const hot = s.hotEdges?.some(([p, c]) => p === from && c === to);
+    return <line key={key} x1={s.pointers ? x1 : a2.cx} y1={s.pointers ? y1 : a2.cy} x2={s.pointers ? x2 : b2.cx} y2={s.pointers ? y2 : b2.cy} className={`lab-tree-edge${hot ? ' hot' : ''}`} markerEnd={s.pointers ? (hot ? 'url(#lab-tree-ah-hot)' : 'url(#lab-tree-ah)') : undefined} />;
   };
+
+  const queue = useGhost(s.queue);
+  const valueOf = (id: number) => s.nodes.find(n => n.id === id)?.value ?? '?';
+  const spinAt = s.spin && at(s.spin.a) && at(s.spin.b) ? (() => {
+    const A = at(s.spin!.a)!, B = at(s.spin!.b)!;
+    return { x: (A.cx + B.cx) / 2 + (s.spin!.dir === 'R' ? 30 : -30), y: (A.cy + B.cy) / 2 + 5 };
+  })() : null;
 
   return (
     <div className="lab-treeview">
-      {s.root === null && floating.length === 0 ? (
-        <div className="lab-empty">root = nullptr &nbsp;(empty tree)</div>
-      ) : (
-        <svg viewBox={`0 0 ${Math.max(W, 180)} ${Math.max(H, 120)}`} className="lab-tree-svg" preserveAspectRatio="xMidYMid meet">
-          <defs>
-            <marker id="lab-tree-ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto">
-              <path d="M 0 0 L 10 5 L 0 10 z" className="lab-tree-ahead" />
-            </marker>
-          </defs>
-          {floating.map((n, i) => (
-            <g key={`f${n.id}`} className="lab-tree-node floating">
-              <circle cx={PAD + i * 120} cy={PAD + 4} r={R} />
-              <text x={PAD + i * 120} y={PAD + 9} textAnchor="middle">{n.value}</text>
-              <text x={PAD + i * 120 + R + 8} y={PAD + 1} className="lab-tree-note">new Node</text>
-              <text x={PAD + i * 120 + R + 8} y={PAD + 13} className="lab-tree-note">left = right = NULL</text>
-            </g>
-          ))}
-          {s.root === null && <text x={PAD} y={H - 18} className="lab-tree-note">root = nullptr</text>}
-          {s.nodes.map(n => (
-            <g key={`e${n.id}`}>
-              {n.l !== null && layout.pos.has(n.l) && edge(n.id, n.l, `l${n.id}`)}
-              {n.r !== null && layout.pos.has(n.r) && edge(n.id, n.r, `r${n.id}`)}
-            </g>
-          ))}
-          {s.nodes.map(n => {
-            if (!layout.pos.has(n.id)) return null;
-            const { cx, cy } = xy(n.id);
-            const cls = s.hi.includes(n.id) ? 'hi' : s.path.includes(n.id) ? 'path' : '';
-            return (
-              <g key={n.id} className={`lab-tree-node ${cls}`}>
-                <circle cx={cx} cy={cy} r={R} />
-                <text x={cx} y={cy + 5} textAnchor="middle">{n.value}</text>
-                {s.badges && s.badges[n.id] && (
-                  <text x={cx} y={cy + R + 13} textAnchor="middle" className={`lab-tree-badge${s.badBadges?.includes(n.id) ? ' bad' : ''}`}>{s.badges[n.id]}</text>
-                )}
+      {s.banner && (
+        <div className={`lab-avl-banner case-${s.banner.tag}`} role="status">
+          <span className="lab-avl-tag">{s.banner.tag}</span>
+          <div className="lab-avl-text">
+            <b>{s.banner.title}</b>
+            <span>{s.banner.detail}</span>
+            {s.banner.rotation && <em className="lab-avl-rot">⟳ {s.banner.rotation}</em>}
+            {s.banner.code && <code className="lab-avl-code" key={s.banner.code}>{s.banner.code}</code>}
+          </div>
+        </div>
+      )}
+      <div className="lab-tree-main">
+        {s.root === null && floating.length === 0 ? (
+          <div className="lab-empty">root = nullptr &nbsp;(empty tree)</div>
+        ) : (
+          <svg viewBox={`0 0 ${fr.W} ${fr.H}`} className="lab-tree-svg" preserveAspectRatio="xMidYMid meet">
+            <defs>
+              <marker id="lab-tree-ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto">
+                <path d="M 0 0 L 10 5 L 0 10 z" className="lab-tree-ahead" />
+              </marker>
+              <marker id="lab-tree-ah-hot" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" markerUnits="userSpaceOnUse" orient="auto">
+                <path d="M 0 0 L 10 5 L 0 10 z" className="lab-tree-ahead-hot" />
+              </marker>
+            </defs>
+            {floating.map((n, i) => (
+              <g key={`f${n.id}`} className="lab-tree-node floating">
+                <circle cx={PAD + i * 120} cy={PAD + 4} r={R} />
+                <text x={PAD + i * 120} y={PAD + 9} textAnchor="middle">{n.value}</text>
+                <text x={PAD + i * 120 + R + 8} y={PAD + 1} className="lab-tree-note">new Node</text>
+                <text x={PAD + i * 120 + R + 8} y={PAD + 13} className="lab-tree-note">left = right = NULL</text>
               </g>
-            );
-          })}
-        </svg>
+            ))}
+            {s.root === null && <text x={PAD} y={fr.H - 18} className="lab-tree-note">root = nullptr</text>}
+            {s.nodes.map(n => (
+              <g key={`e${n.id}`}>
+                {n.l !== null && target.pos.has(n.l) && edge(n.id, n.l, `l${n.id}`)}
+                {n.r !== null && target.pos.has(n.r) && edge(n.id, n.r, `r${n.id}`)}
+              </g>
+            ))}
+            {s.nodes.map(n => {
+              const p = at(n.id);
+              if (!p || !target.pos.has(n.id)) return null;
+              const { cx, cy } = p;
+              const role = s.roles?.[n.id];
+              const cls = [
+                s.hi.includes(n.id) ? 'hi' : s.path.includes(n.id) ? 'path' : '',
+                s.moved?.includes(n.id) ? 'moved' : '',
+                role ? `role-${role}` : '',
+              ].join(' ');
+              return (
+                <g key={n.id} className={`lab-tree-node ${cls}`}>
+                  <circle cx={cx} cy={cy} r={R} />
+                  <text x={cx} y={cy + 5} textAnchor="middle">{n.value}</text>
+                  {s.badges && s.badges[n.id] && (
+                    <text x={cx} y={cy + R + 13} textAnchor="middle" className={`lab-tree-badge${s.badBadges?.includes(n.id) ? ' bad' : ''}`}>{s.badges[n.id]}</text>
+                  )}
+                  {s.heights && s.heights[n.id] !== undefined && (() => {
+                    const hv = s.heights![n.id], bf = s.bfs?.[n.id] ?? 0, dh = s.bumped?.[n.id] ?? 0, up = dh !== 0;
+                    const bcls = Math.abs(bf) > 1 ? 'bad' : bf === 0 ? 'ok' : 'warn';
+                    return (
+                      <>
+                        <text key={`h${n.id}-${hv}`} x={cx} y={cy + R + 13} textAnchor="middle" className={`lab-hgt${up ? ' bump' : ''}`}>height {hv}</text>
+                        {up && <text key={`p${n.id}-${hv}`} x={cx + 36} y={cy + R + 11} className="lab-hgt-plus">{dh > 0 ? '+' : ''}{dh}</text>}
+                        <g className={`lab-bf ${bcls}`} transform={`translate(${cx + R - 2}, ${cy - R - 4})`}>
+                          <rect x={-2} y={-10} width={bf === 0 ? 29 : 33} height={14} rx={4} />
+                          <text x={bf === 0 ? 12.5 : 14.5} y={0.5} textAnchor="middle">bf {bf > 0 ? '+' : ''}{bf}</text>
+                        </g>
+                      </>
+                    );
+                  })()}
+                  {role && (
+                    <g className={`lab-role role-${role}`} transform={`translate(${cx - R - 6}, ${cy - R - 2})`}>
+                      <rect x={-8} y={-9} width={16} height={16} rx={4} />
+                      <text x={0} y={3} textAnchor="middle">{role}</text>
+                    </g>
+                  )}
+                </g>
+              );
+            })}
+            {spinAt && s.spin && (
+              <text key={`${s.spin.a}-${s.spin.b}-${s.spin.dir}`} className={`lab-spin dir-${s.spin.dir}`} x={spinAt.x} y={spinAt.y} textAnchor="middle">
+                {s.spin.dir === 'R' ? '↻' : '↺'}
+              </text>
+            )}
+          </svg>
+        )}
+        {queue.val && <QueueBox q={queue.val} leaving={queue.leaving} valueOf={valueOf} />}
+      </div>
+
+      {s.roles && Object.keys(s.roles).length > 0 && (
+        <div className="lab-role-legend">
+          <span><i className="role-z" />z — unbalanced node</span>
+          <span><i className="role-y" />y — its heavy child</span>
+          <span><i className="role-x" />x — grandchild on the heavy path</span>
+          <span><i className="moved" />subtree that changes parent</span>
+        </div>
       )}
 
       {s.arrayView && (
@@ -556,11 +704,11 @@ function CallsView({ s }: { s: CallsSnap }) {
   );
 }
 
-function Stage({ snap }: { snap: Snap }) {
+function Stage({ snap, animMs }: { snap: Snap; animMs: number }) {
   if (snap.kind === 'calls') return <CallsView s={snap} />;
   if (snap.kind === 'array') return <ArrayView s={snap} />;
   if (snap.kind === 'list') return <ListView s={snap} />;
-  if (snap.kind === 'tree') return <TreeView s={snap} />;
+  if (snap.kind === 'tree') return <TreeView s={snap} animMs={animMs} />;
   return <HashView s={snap} />;
 }
 
@@ -648,7 +796,10 @@ function ClassLabBody({ lab }: { lab: Lab }) {
   useEffect(() => {
     if (!playing) return;
     if (idx >= steps.length - 1) { setPlaying(false); return; }
-    const t = setTimeout(() => setIdx(i => i + 1), speed);
+    // a rotation step needs time to be SEEN: wait for the whole slow swing before moving on
+    const cur = steps[idx];
+    const swinging = cur && cur.snap.kind === 'tree' && !!(cur.snap as TreeSnap).swing;
+    const t = setTimeout(() => setIdx(i => i + 1), swinging ? Math.max(speed, Math.round(Math.max(Math.min(700, speed * 0.75), 1500) + 450)) : speed);
     return () => clearTimeout(t);
   }, [playing, idx, steps, speed]);
 
@@ -758,7 +909,7 @@ function ClassLabBody({ lab }: { lab: Lab }) {
         </div>
 
         <div className="lab-stage" key={`stage-${tick}`}>
-          <Stage snap={snap} />
+          <Stage snap={snap} animMs={Math.max(0, Math.min(700, Math.round(speed * 0.75)))} />
         </div>
       </div>
 

@@ -2260,7 +2260,8 @@ body {
   fill: rgba(0,245,255,0.1);
   stroke: rgba(0,245,255,0.45);
   stroke-width: 1.6;
-  transition: all 0.25s ease;
+  /* NOT "all": cx/cy are driven frame-by-frame by the glide animation, a CSS transition on them would make circles lag behind their labels */
+  transition: fill 0.25s ease, stroke 0.25s ease, stroke-width 0.25s ease;
 }
 .lab-tree-node text {
   fill: var(--tp);
@@ -3574,3 +3575,94 @@ input[type=number] { -moz-appearance: textfield; appearance: textfield; }
 .lab-tree-badge { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; font-weight: 700; fill: var(--ts); }
 .lab-tree-badge.bad { fill: #ff5c8a; }
 .lab-tree-node.floating + .lab-tree-badge { display: none; }
+
+/* ── Level-order QUEUE box (appears when the function creates the queue, fades out when it returns) ── */
+.lab-tree-main { width: 100%; display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: center; gap: 14px; }
+.lab-tree-main .lab-tree-svg { flex: 1 1 320px; min-width: 0; }
+.lab-qbox {
+  flex: 0 1 270px; min-width: 220px; padding: 10px 12px 12px; border-radius: 12px;
+  border: 1.5px solid rgba(255,107,53,0.55); background: rgba(255,107,53,0.07);
+  box-shadow: 0 0 18px rgba(255,107,53,0.18);
+  font-family: 'JetBrains Mono', monospace; transform-origin: top center;
+}
+.lab-qbox.entering { animation: qboxIn 0.45s cubic-bezier(.2,.9,.3,1.2) both; }
+.lab-qbox.leaving { animation: qboxOut 0.5s ease-in both; pointer-events: none; }
+@keyframes qboxIn { from { opacity: 0; transform: translateY(-10px) scale(0.85); } to { opacity: 1; transform: none; } }
+@keyframes qboxOut { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateY(10px) scale(0.85); } }
+.lab-qbox-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
+.lab-qbox-title { color: var(--ao); font-weight: 700; font-size: 0.82rem; }
+.lab-qbox-size { color: var(--ts); font-size: 0.72rem; }
+.lab-qbox-lane { display: flex; align-items: center; gap: 6px; }
+.lab-qbox-end { font-size: 0.58rem; line-height: 1.25; color: var(--tm); text-align: center; flex: none; }
+.lab-qbox-end.front { color: var(--ag); }
+.lab-qbox-items {
+  flex: 1; min-height: 44px; display: flex; flex-wrap: wrap; align-items: center; gap: 5px; padding: 5px;
+  border-top: 2px solid rgba(255,107,53,0.6); border-bottom: 2px solid rgba(255,107,53,0.6); border-radius: 4px;
+}
+.lab-qbox-empty { color: var(--tm); font-size: 0.72rem; font-style: italic; width: 100%; text-align: center; }
+.lab-qitem {
+  min-width: 34px; height: 34px; padding: 0 6px; display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 8px; border: 1.5px solid rgba(0,245,255,0.5); background: rgba(0,245,255,0.1); color: var(--tp);
+  font-weight: 700; font-size: 0.85rem; animation: qitemIn 0.4s cubic-bezier(.2,.9,.3,1.3) both;
+}
+.lab-qitem.is-front { border-color: var(--ag); background: rgba(0,255,136,0.16); box-shadow: 0 0 8px rgba(0,255,136,0.4); }
+.lab-qitem.is-back:not(.is-front) { border-color: var(--ao); }
+@keyframes qitemIn { from { opacity: 0; transform: translateX(26px) scale(0.6); } to { opacity: 1; transform: none; } }
+.lab-qbox-foot { display: flex; justify-content: space-between; gap: 8px; margin-top: 8px; font-size: 0.74rem; color: var(--ts); min-height: 18px; }
+.lab-qbox-curr b { color: var(--ag); }
+.lab-qbox-note { color: var(--ao); font-weight: 700; animation: qitemIn 0.35s ease both; }
+
+/* ── AVL rotation: case banner, roles, heavy path, glide ── */
+.lab-avl-banner {
+  width: 100%; max-width: 640px; display: flex; gap: 12px; align-items: flex-start; margin-bottom: 10px; padding: 9px 12px;
+  border-radius: 10px; border: 1.5px solid rgba(255,45,120,0.55); background: rgba(255,45,120,0.08); animation: qboxIn 0.35s ease both;
+}
+.lab-avl-banner b { display: block; font-family: 'Orbitron', sans-serif; font-size: 0.78rem; color: #ff7aa8; margin-bottom: 2px; }
+.lab-avl-banner span:not(.lab-avl-tag) { font-family: 'Rajdhani', sans-serif; font-size: 0.95rem; color: var(--ts); line-height: 1.3; }
+.lab-avl-tag {
+  flex: none; min-width: 42px; text-align: center; padding: 6px 8px; border-radius: 8px;
+  font-family: 'Orbitron', sans-serif; font-weight: 900; font-size: 0.95rem; color: #fff; background: linear-gradient(135deg, #ff2d78, #bf5aff);
+}
+.lab-tree-edge.hot { stroke: #ffb020; stroke-width: 3; filter: drop-shadow(0 0 4px rgba(255,176,32,0.7)); }
+.lab-tree-edge.hot[marker-end] { stroke: #ffb020; stroke-width: 3; }
+.lab-tree-ahead-hot { fill: #ffb020; }
+.lab-tree-node.role-z circle { stroke: #ff2d78; stroke-width: 3; fill: rgba(255,45,120,0.22); filter: drop-shadow(0 0 8px rgba(255,45,120,0.65)); }
+.lab-tree-node.role-y circle { stroke: #ffb020; stroke-width: 3; fill: rgba(255,176,32,0.2); filter: drop-shadow(0 0 8px rgba(255,176,32,0.55)); }
+.lab-tree-node.role-x circle { stroke: #bf5aff; stroke-width: 3; fill: rgba(191,90,255,0.24); filter: drop-shadow(0 0 8px rgba(191,90,255,0.55)); }
+.lab-tree-node.moved circle { stroke-dasharray: 4 3; stroke: #00f5ff; stroke-width: 3; fill: rgba(0,245,255,0.22); animation: movedPulse 0.9s ease-in-out infinite alternate; }
+@keyframes movedPulse { from { filter: drop-shadow(0 0 2px rgba(0,245,255,0.3)); } to { filter: drop-shadow(0 0 10px rgba(0,245,255,0.9)); } }
+.lab-role rect { stroke: none; }
+.lab-role text { font-size: 11px; font-weight: 900; fill: #05030f; }
+.lab-role.role-z rect, .lab-role-legend i.role-z { fill: #ff2d78; background: #ff2d78; }
+.lab-role.role-y rect, .lab-role-legend i.role-y { fill: #ffb020; background: #ffb020; }
+.lab-role.role-x rect, .lab-role-legend i.role-x { fill: #bf5aff; background: #bf5aff; }
+.lab-spin { font-size: 26px; fill: #ffb020; transform-box: fill-box; transform-origin: center; animation: spinOnce 1.1s ease-in-out infinite; }
+.lab-spin.dir-L { animation-name: spinOnceL; }
+@keyframes spinOnce { from { transform: rotate(0); } to { transform: rotate(360deg); } }
+@keyframes spinOnceL { from { transform: rotate(0); } to { transform: rotate(-360deg); } }
+.lab-role-legend { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 14px; margin-top: 8px; font-size: 0.78rem; color: var(--ts); font-family: 'Rajdhani', sans-serif; }
+.lab-role-legend i { display: inline-block; width: 11px; height: 11px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+.lab-role-legend i.moved { background: transparent; border: 2px dashed #00f5ff; }
+@media (prefers-reduced-motion: reduce) { .lab-spin, .lab-tree-node.moved circle, .lab-qitem, .lab-qbox.entering, .lab-qbox.leaving { animation: none; } }
+
+/* banner: rotation name + the pointer assignment that is executing right now */
+.lab-avl-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.lab-avl-rot { font-style: normal; font-family: 'Rajdhani', sans-serif; font-weight: 700; font-size: 0.95rem; color: #ffb020; }
+.lab-avl-code {
+  display: block; margin-top: 3px; padding: 5px 9px; border-radius: 6px; width: fit-content; max-width: 100%;
+  font-family: 'JetBrains Mono', monospace; font-size: 0.82rem; font-weight: 600; color: #00ff88; white-space: pre-wrap;
+  background: rgba(0,0,0,0.45); border: 1px solid rgba(0,255,136,0.4); animation: qitemIn 0.3s ease both;
+}
+
+/* AVL: stored height under each node (pulses when updateHeight changes it) + balance factor chip on top */
+.lab-hgt { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; font-weight: 700; fill: #9fe8ff; transform-box: fill-box; transform-origin: center; }
+.lab-hgt.bump { animation: hgtBump 1.1s ease-out both; }
+@keyframes hgtBump { 0% { transform: scale(1); fill: #ffe14d; } 25% { transform: scale(1.7); fill: #ffe14d; } 100% { transform: scale(1); fill: #9fe8ff; } }
+.lab-hgt-plus { font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 900; fill: #ffe14d; animation: hgtPlus 1.1s ease-out both; }
+@keyframes hgtPlus { from { opacity: 1; transform: translateY(0); } to { opacity: 0; transform: translateY(-16px); } }
+.lab-bf rect { stroke-width: 1.4; }
+.lab-bf text { font-family: 'JetBrains Mono', monospace; font-size: 9px; font-weight: 800; }
+.lab-bf.ok rect { fill: rgba(0,255,136,0.15); stroke: #00ff88; } .lab-bf.ok text { fill: #00ff88; }
+.lab-bf.warn rect { fill: rgba(255,176,32,0.16); stroke: #ffb020; } .lab-bf.warn text { fill: #ffb020; }
+.lab-bf.bad rect { fill: rgba(255,45,120,0.3); stroke: #ff2d78; } .lab-bf.bad text { fill: #ff7aa8; }
+@media (prefers-reduced-motion: reduce) { .lab-hgt.bump, .lab-hgt-plus { animation: none; } }

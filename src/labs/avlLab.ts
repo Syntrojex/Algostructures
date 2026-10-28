@@ -218,7 +218,7 @@ public:
 	void levelOrder() /*@lo*/
 	{
 		queue<Node*> q; /*@lo_init*/
-		q.push(root);
+		q.push(root); /*@lo_push*/
 		while (!q.empty()) /*@lo_while*/
 		{
 			Node* curr = q.front(); /*@lo_front*/
@@ -265,18 +265,33 @@ function structure(st: AState) {
 }
 
 function avlSnap(st: AState): TreeSnap {
-  const h = structure(st);
-  const badges: Record<number, string> = {};
+  const reach = structure(st);                       // only used to know which nodes are still linked in
+  const heights: Record<number, number> = {};
+  const bfs: Record<number, number> = {};
   const bad: number[] = [];
-  const nodes = Object.keys(st.nodes).map(Number).filter(id => h[id] !== undefined).map(id => {
+  const nodes = Object.keys(st.nodes).map(Number).filter(id => reach[id] !== undefined).map(id => {
     const n = st.nodes[id];
-    const hl = n.l === null ? 0 : h[n.l] ?? 0, hr = n.r === null ? 0 : h[n.r] ?? 0;
-    const bf = hl - hr;
-    badges[id] = `h${h[id]} · ${bf > 0 ? '+' : ''}${bf}`;
-    if (Math.abs(bf) > 1) bad.push(id);
+    // the STORED heights — exactly what node->height holds right now (they change only when updateHeight runs)
+    const hl = n.l === null ? 0 : st.nodes[n.l]?.h ?? 0, hr = n.r === null ? 0 : st.nodes[n.r]?.h ?? 0;
+    heights[id] = n.h;
+    bfs[id] = hl - hr;
+    if (Math.abs(hl - hr) > 1) bad.push(id);
     return { id, value: n.v, l: n.l, r: n.r };
   });
-  return { kind: 'tree', nodes, root: st.root, hi: [], path: [], ptrs: [], badges, badBadges: bad, pointers: true };
+  return { kind: 'tree', nodes, root: st.root, hi: [], path: [], ptrs: [], heights, bfs, badBadges: bad, pointers: true };
+}
+
+/* mark, per step, which nodes had their stored height changed compared with the previous step */
+function markBumps(steps: LabStep[]): LabStep[] {
+  let prev: Record<number, number> = {};
+  for (const stp of steps) {
+    const sn = stp.snap as TreeSnap;
+    const h = sn.heights || {};
+    sn.bumped = {};
+    for (const id of Object.keys(h).map(Number)) if (prev[id] !== undefined && prev[id] !== h[id]) sn.bumped[id] = h[id] - prev[id];
+    prev = h;
+  }
+  return steps;
 }
 
 function init(): AState {
@@ -293,69 +308,115 @@ function runAvl(st: AState, opId: string, a: Record<string, number>): LabStep[] 
   const N = (id: number | null) => (id === null ? 'nullptr' : String(st.nodes[id].v));
   const H = (id: number | null) => (id === null ? 0 : st.nodes[id].h);
   const BF = (id: number | null) => (id === null ? 0 : H(st.nodes[id].l) - H(st.nodes[id].r));
-  const M = (patch: Partial<TreeSnap>) => patch;
+  /* While a rebalance is in progress, `overlay` (roles z/y/x, banner, heavy-path edges…) is merged into every step,
+     so the picture keeps telling you WHICH case this is while the rotation runs. */
+  let overlay: Partial<TreeSnap> = {};
+  const M = (patch: Partial<TreeSnap>): Partial<TreeSnap> => ({ ...overlay, ...patch });
   const attachTo = (parent: number | null, side: 'l' | 'r'): Attach => id => { if (parent === null) st.root = id; else st.nodes[parent][side] = id; };
   const setH = (id: number) => { st.nodes[id].h = 1 + Math.max(H(st.nodes[id].l), H(st.nodes[id].r)); return st.nodes[id].h; };
 
-  /* ── rotations (each pointer pair is changed at once, so the picture never shows a half-finished loop) ── */
+  /* ── rotations (each pointer pair is changed at once, so the picture never shows a half-finished loop;
+        the stage then GLIDES the nodes from their old to their new position) ── */
+  /* the banner's live "code line": which pointer assignment is executing RIGHT NOW, with the real node values filled in */
+  const C = (code: string): Partial<TreeSnap> => (overlay.banner ? { banner: { ...overlay.banner, code } } : {});
   const rotateRight = (y: number, attach: Attach): number => {
-    S('rr', `rotateRight(${N(y)}): ${N(y)} is too heavy on the LEFT, so its left child will take its place.`, M({ hi: [y] }));
-    const x = st.nodes[y].l as number;
-    S('rr_x', `x = y->left → x is ${N(x)}; it becomes the new root of this subtree.`, M({ hi: [y, x] }));
+    const x0 = st.nodes[y].l as number;
+    const vy = N(y), vx = N(x0);
+    S('rr', `rotateRight(${vy}): ${vy} is too heavy on the LEFT, so its left child will take its place. Picture ${vy} swinging DOWN to the right while ${vx} swings UP.`, M({ hi: [y], spin: { a: y, b: x0, dir: 'R' }, ...C(`rotateRight(y = ${vy})`) }));
+    const x = x0;
+    S('rr_x', `x = y->left → x is ${vx}; it becomes the new root of this subtree.`, M({ hi: [y, x], spin: { a: y, b: x, dir: 'R' }, ...C(`Node* x = y->left;      →  x = ${vx}`) }));
     const moved = st.nodes[x].r;
-    S('rr_moved', `moved = x->right = ${N(moved)}${moved === null ? '' : ' — it sits between x and y in sorted order, so it will hang off y'}.`, M({ hi: moved === null ? [x] : [x, moved] }));
+    const vm = N(moved);
+    S('rr_moved', `moved = x->right = ${vm}${moved === null ? ' (nothing to move)' : ' — it sits between x and y in sorted order, so it will hang off y'}.`, M({ hi: [x], moved: moved === null ? [] : [moved], spin: { a: y, b: x, dir: 'R' }, ...C(`Node* moved = x->right;  →  moved = ${vm}`) }));
     st.nodes[x].r = y; st.nodes[y].l = moved; attach(x);
-    S('rr_up', `x->right = y → ${N(y)} drops down to become the RIGHT child of ${N(x)}.`, M({ hi: [x, y] }));
-    S('rr_fix', `y->left = moved → the in-between subtree is re-attached under ${N(y)}.`, M({ hi: [y] }));
-    S('rr_hy', `updateHeight(y): ${N(y)} is lower now → its height is ${setH(y)}.`, M({ hi: [y] }));
-    S('rr_hx', `updateHeight(x): ${N(x)} is on top now → its height is ${setH(x)}.`, M({ hi: [x] }));
-    S('rr_ret', `return x → ${N(x)} is the new root of this subtree; the caller stores it in the parent's pointer.`, M({ hi: [x] }));
+    S('rr_up', `x->right = y → ${vy} drops down to become the RIGHT child of ${vx}. Watch ${vx} swing up and ${vy} swing down.`, M({ hi: [x, y], moved: moved === null ? [] : [moved], hotEdges: [], swing: { up: x, down: y, dir: 'R' }, ...C(`x->right = y;   →  ${vx}->right = ${vy}`) }));
+    S('rr_fix', `y->left = moved → the in-between subtree${moved === null ? '' : ` (${vm})`} is re-attached under ${vy}.`, M({ hi: [y], moved: moved === null ? [] : [moved], hotEdges: [], ...C(`y->left = moved;  →  ${vy}->left = ${vm}`) }));
+    S('rr_hy', `updateHeight(y): ${vy} is lower now → its height is ${setH(y)}.`, M({ hi: [y], hotEdges: [], ...C(`updateHeight(y);  →  ${vy}.height = ${st.nodes[y].h}`) }));
+    S('rr_hx', `updateHeight(x): ${vx} is on top now → its height is ${setH(x)}.`, M({ hi: [x], hotEdges: [], ...C(`updateHeight(x);  →  ${vx}.height = ${st.nodes[x].h}`) }));
+    S('rr_ret', `return x → ${vx} is the new root of this subtree; the caller stores it in the parent's pointer.`, M({ hi: [x], hotEdges: [], ...C(`return x;  →  ${vx} is the new subtree root`) }));
     return x;
   };
   const rotateLeft = (x: number, attach: Attach): number => {
-    S('rl', `rotateLeft(${N(x)}): ${N(x)} is too heavy on the RIGHT, so its right child will take its place.`, M({ hi: [x] }));
-    const y = st.nodes[x].r as number;
-    S('rl_y', `y = x->right → y is ${N(y)}; it becomes the new root of this subtree.`, M({ hi: [x, y] }));
+    const y0 = st.nodes[x].r as number;
+    const vx = N(x), vy = N(y0);
+    S('rl', `rotateLeft(${vx}): ${vx} is too heavy on the RIGHT, so its right child will take its place. Picture ${vx} swinging DOWN to the left while ${vy} swings UP.`, M({ hi: [x], spin: { a: x, b: y0, dir: 'L' }, ...C(`rotateLeft(x = ${vx})`) }));
+    const y = y0;
+    S('rl_y', `y = x->right → y is ${vy}; it becomes the new root of this subtree.`, M({ hi: [x, y], spin: { a: x, b: y, dir: 'L' }, ...C(`Node* y = x->right;      →  y = ${vy}`) }));
     const moved = st.nodes[y].l;
-    S('rl_moved', `moved = y->left = ${N(moved)}${moved === null ? '' : ' — it sits between x and y in sorted order, so it will hang off x'}.`, M({ hi: moved === null ? [y] : [y, moved] }));
+    const vm = N(moved);
+    S('rl_moved', `moved = y->left = ${vm}${moved === null ? ' (nothing to move)' : ' — it sits between x and y in sorted order, so it will hang off x'}.`, M({ hi: [y], moved: moved === null ? [] : [moved], spin: { a: x, b: y, dir: 'L' }, ...C(`Node* moved = y->left;   →  moved = ${vm}`) }));
     st.nodes[y].l = x; st.nodes[x].r = moved; attach(y);
-    S('rl_up', `y->left = x → ${N(x)} drops down to become the LEFT child of ${N(y)}.`, M({ hi: [y, x] }));
-    S('rl_fix', `x->right = moved → the in-between subtree is re-attached under ${N(x)}.`, M({ hi: [x] }));
-    S('rl_hx', `updateHeight(x): ${N(x)} is lower now → its height is ${setH(x)}.`, M({ hi: [x] }));
-    S('rl_hy', `updateHeight(y): ${N(y)} is on top now → its height is ${setH(y)}.`, M({ hi: [y] }));
-    S('rl_ret', `return y → ${N(y)} is the new root of this subtree; the caller stores it in the parent's pointer.`, M({ hi: [y] }));
+    S('rl_up', `y->left = x → ${vx} drops down to become the LEFT child of ${vy}. Watch ${vy} swing up and ${vx} swing down.`, M({ hi: [y, x], moved: moved === null ? [] : [moved], hotEdges: [], swing: { up: y, down: x, dir: 'L' }, ...C(`y->left = x;   →  ${vy}->left = ${vx}`) }));
+    S('rl_fix', `x->right = moved → the in-between subtree${moved === null ? '' : ` (${vm})`} is re-attached under ${vx}.`, M({ hi: [x], moved: moved === null ? [] : [moved], hotEdges: [], ...C(`x->right = moved;  →  ${vx}->right = ${vm}`) }));
+    S('rl_hx', `updateHeight(x): ${vx} is lower now → its height is ${setH(x)}.`, M({ hi: [x], hotEdges: [], ...C(`updateHeight(x);  →  ${vx}.height = ${st.nodes[x].h}`) }));
+    S('rl_hy', `updateHeight(y): ${vy} is on top now → its height is ${setH(y)}.`, M({ hi: [y], hotEdges: [], ...C(`updateHeight(y);  →  ${vy}.height = ${st.nodes[y].h}`) }));
+    S('rl_ret', `return y → ${vy} is the new root of this subtree; the caller stores it in the parent's pointer.`, M({ hi: [y], hotEdges: [], ...C(`return y;  →  ${vy} is the new subtree root`) }));
     return y;
   };
 
   const rebalance = (n: number, attach: Attach): number => {
+    overlay = { roles: {} };
     S('rb', `rebalance(${N(n)}): recompute its height, then check its balance factor.`, M({ hi: [n] }));
     S('rb_h', `updateHeight → the height of ${N(n)} is ${setH(n)}.`, M({ hi: [n] }));
     const hl = H(st.nodes[n].l), hr = H(st.nodes[n].r), bf = hl - hr;
-    S('rb_bf', `balanceFactor = height(left) − height(right) = ${hl} − ${hr} = ${bf > 0 ? '+' : ''}${bf}. ${Math.abs(bf) <= 1 ? 'Within −1…+1 → this node is balanced.' : '|bf| > 1 → UNBALANCED, a rotation is needed.'}`, M({ hi: [n] }));
+    const bad = Math.abs(bf) > 1;
+    S('rb_bf', `balanceFactor = height(left) − height(right) = ${hl} − ${hr} = ${bf > 0 ? '+' : ''}${bf}. ${bad ? '|bf| > 1 → UNBALANCED (red). Next: find out WHICH of the 4 cases it is.' : 'Within −1…+1 → this node is balanced.'}`, M({ hi: [n], roles: bad ? { [n]: 'z' } : {} }));
+    const sgn = (v: number) => (v > 0 ? '+' : '') + v;
+    let res: number;
     if (bf > 1) {
-      const left = st.nodes[n].l as number;
-      const lbf = BF(left);
+      const y = st.nodes[n].l as number;
+      const lbf = BF(y);
+      const zy = [[n, y]] as [number, number][];
       if (lbf >= 0) {
-        S('rb_ll', `Left-heavy, and the left child is not right-heavy (its bf = ${lbf > 0 ? '+' : ''}${lbf}) → the “LL” case: ONE right rotation.`, M({ hi: [n, left] }));
-        return rotateRight(n, attach);
+        const x = (H(st.nodes[y].l) >= H(st.nodes[y].r) ? st.nodes[y].l : st.nodes[y].r) as number;
+        overlay = { roles: { [n]: 'z', [y]: 'y', [x]: 'x' }, hotEdges: [...zy, [y, x]],
+          banner: { tag: 'LL', title: 'Left-Left case', rotation: `Fix: ONE single RIGHT rotation at z = ${N(n)}`, detail: `z = ${N(n)} leans LEFT (${sgn(bf)}) and its left child y = ${N(y)} also leans left (${sgn(lbf)}). The extra height is on the straight, OUTER left-left line → one RIGHT rotation at z fixes it.` } };
+        S('rb_ll', `LL case: z=${N(n)} (bf ${sgn(bf)}) → y=${N(y)} (bf ${sgn(lbf)}) → x=${N(x)}. The heavy path goes left, left — a straight line → ONE right rotation.`, M({ hi: [n, y] }));
+        res = rotateRight(n, attach);
+      } else {
+        const x = st.nodes[y].r as number;
+        overlay = { roles: { [n]: 'z', [y]: 'y', [x]: 'x' }, hotEdges: [...zy, [y, x]],
+          banner: { tag: 'LR', title: 'Left-Right case', rotation: `Fix: DOUBLE rotation — LEFT at y = ${N(y)}, then RIGHT at z = ${N(n)}`, detail: `z = ${N(n)} leans LEFT (${sgn(bf)}) but its left child y = ${N(y)} leans RIGHT (${sgn(lbf)}). The heavy path bends (left, then right) — a zig-zag. One rotation would not cure a zig-zag, so: 1) rotate y LEFT to straighten it into an LL line, 2) rotate z RIGHT.` } };
+        S('rb_lr', `LR case: z=${N(n)} (bf ${sgn(bf)}) → y=${N(y)} (bf ${sgn(lbf)}) → x=${N(x)}. The heavy path BENDS (left then right) → TWO rotations: y left, then z right.`, M({ hi: [n, y, x] }));
+        const tagStep = (k: number, what: string) => { overlay = { ...overlay, banner: { ...overlay.banner!, title: `Left-Right case · step ${k} of 2 — ${what}` } }; };
+        tagStep(1, 'rotate y LEFT');
+        st.nodes[n].l = rotateLeft(y, attachTo(n, 'l'));
+        // after step 1 the zig-zag is a straight LL line: z → x → y
+        overlay = { roles: { [n]: 'z', [x]: 'y', [y]: 'x' }, hotEdges: [[n, x], [x, y]], banner: overlay.banner };
+        tagStep(2, 'rotate z RIGHT (now a plain LL)');
+        S('rb_lr', `Step 1 done: the zig-zag is now a straight LL line z=${N(n)} → ${N(x)} → ${N(y)}. Step 2: rotate ${N(n)} right.`, M({ hi: [n, x] }));
+        res = rotateRight(n, attach);
       }
-      S('rb_lr', `Left-heavy, but the left child leans RIGHT (its bf = ${lbf}) → the “LR” case: rotate the left child LEFT first, then rotate ${N(n)} RIGHT.`, M({ hi: [n, left] }));
-      st.nodes[n].l = rotateLeft(left, attachTo(n, 'l'));
-      return rotateRight(n, attach);
-    }
-    if (bf < -1) {
-      const right = st.nodes[n].r as number;
-      const rbf = BF(right);
+    } else if (bf < -1) {
+      const y = st.nodes[n].r as number;
+      const rbf = BF(y);
+      const zy = [[n, y]] as [number, number][];
       if (rbf <= 0) {
-        S('rb_rr', `Right-heavy, and the right child is not left-heavy (its bf = ${rbf > 0 ? '+' : ''}${rbf}) → the “RR” case: ONE left rotation.`, M({ hi: [n, right] }));
-        return rotateLeft(n, attach);
+        const x = (H(st.nodes[y].r) >= H(st.nodes[y].l) ? st.nodes[y].r : st.nodes[y].l) as number;
+        overlay = { roles: { [n]: 'z', [y]: 'y', [x]: 'x' }, hotEdges: [...zy, [y, x]],
+          banner: { tag: 'RR', title: 'Right-Right case', rotation: `Fix: ONE single LEFT rotation at z = ${N(n)}`, detail: `z = ${N(n)} leans RIGHT (${sgn(bf)}) and its right child y = ${N(y)} also leans right (${sgn(rbf)}). The extra height is on the straight, OUTER right-right line → one LEFT rotation at z fixes it.` } };
+        S('rb_rr', `RR case: z=${N(n)} (bf ${sgn(bf)}) → y=${N(y)} (bf ${sgn(rbf)}) → x=${N(x)}. The heavy path goes right, right — a straight line → ONE left rotation.`, M({ hi: [n, y] }));
+        res = rotateLeft(n, attach);
+      } else {
+        const x = st.nodes[y].l as number;
+        overlay = { roles: { [n]: 'z', [y]: 'y', [x]: 'x' }, hotEdges: [...zy, [y, x]],
+          banner: { tag: 'RL', title: 'Right-Left case', rotation: `Fix: DOUBLE rotation — RIGHT at y = ${N(y)}, then LEFT at z = ${N(n)}`, detail: `z = ${N(n)} leans RIGHT (${sgn(bf)}) but its right child y = ${N(y)} leans LEFT (${sgn(rbf)}). The heavy path bends (right, then left) — a zig-zag. So: 1) rotate y RIGHT to straighten it into an RR line, 2) rotate z LEFT.` } };
+        S('rb_rl', `RL case: z=${N(n)} (bf ${sgn(bf)}) → y=${N(y)} (bf ${sgn(rbf)}) → x=${N(x)}. The heavy path BENDS (right then left) → TWO rotations: y right, then z left.`, M({ hi: [n, y, x] }));
+        const tagStep = (k: number, what: string) => { overlay = { ...overlay, banner: { ...overlay.banner!, title: `Right-Left case · step ${k} of 2 — ${what}` } }; };
+        tagStep(1, 'rotate y RIGHT');
+        st.nodes[n].r = rotateRight(y, attachTo(n, 'r'));
+        overlay = { roles: { [n]: 'z', [x]: 'y', [y]: 'x' }, hotEdges: [[n, x], [x, y]], banner: overlay.banner };
+        tagStep(2, 'rotate z LEFT (now a plain RR)');
+        S('rb_rl', `Step 1 done: the zig-zag is now a straight RR line z=${N(n)} → ${N(x)} → ${N(y)}. Step 2: rotate ${N(n)} left.`, M({ hi: [n, x] }));
+        res = rotateLeft(n, attach);
       }
-      S('rb_rl', `Right-heavy, but the right child leans LEFT (its bf = +${rbf}) → the “RL” case: rotate the right child RIGHT first, then rotate ${N(n)} LEFT.`, M({ hi: [n, right] }));
-      st.nodes[n].r = rotateRight(right, attachTo(n, 'r'));
-      return rotateLeft(n, attach);
+    } else {
+      overlay = {};
+      S('rb_ok', `Balanced → return ${N(n)} unchanged.`, M({ hi: [n] }));
+      return n;
     }
-    S('rb_ok', `Balanced → return ${N(n)} unchanged.`, M({ hi: [n] }));
-    return n;
+    overlay = {};
+    return res;
   };
 
   /* ── insert ── */
@@ -449,19 +510,23 @@ function runAvl(st: AState, opId: string, a: Record<string, number>): LabStep[] 
 
   const levelOrder = () => {
     S('lo', 'Called levelOrder(): visit the tree level by level using a QUEUE.');
-    if (st.root === null) { S('lo_init', 'The tree is empty — nothing to print.'); return; }
-    const q = [st.root]; const seen: number[] = [];
-    S('lo_init', `queue = [${N(st.root)}]`, M({ hi: [st.root] }));
+    const q: number[] = [];
+    const Q = (curr: number | null = null, note?: string): Partial<TreeSnap> => ({ queue: { ids: q.slice(), curr, note } });
+    S('lo_init', 'queue<Node*> q; — a brand-new, EMPTY queue is created. Watch the box on the right: it exists only while this function runs.', M({ ...Q() }));
+    if (st.root === null) { S('lo_push', 'The tree is empty — nothing to print.'); return; }
+    q.push(st.root); const seen: number[] = [];
+    S('lo_push', `q.push(root) → the queue now holds [${N(st.root)}].`, M({ hi: [st.root], ...Q(null, `push ${N(st.root)}`) }));
     while (q.length) {
-      S('lo_while', `queue is not empty → [${q.map(N).join(', ')}]`);
+      S('lo_while', `queue is not empty → [${q.map(N).join(', ')}]`, M({ path: seen.slice(), ...Q() }));
       const cur = q.shift() as number; seen.push(cur);
-      S('lo_front', `Take ${N(cur)} from the FRONT of the queue.`, M({ hi: [cur], path: seen.slice() }));
-      S('lo_print', `Print ${N(cur)}.`, M({ hi: [cur], path: seen.slice() }), String(N(cur)), true);
+      S('lo_front', `Take ${N(cur)} from the FRONT of the queue (front + pop).`, M({ hi: [cur], path: seen.slice(), ...Q(cur, `pop ${N(cur)}`) }));
+      S('lo_print', `Print ${N(cur)}.`, M({ hi: [cur], path: seen.slice(), ...Q(cur) }), String(N(cur)), true);
       const { l, r } = st.nodes[cur];
-      if (l !== null) { q.push(l); S('lo_left', `Left child ${N(l)} joins the back of the queue.`, M({ hi: [cur, l], path: seen.slice() })); }
-      if (r !== null) { q.push(r); S('lo_right', `Right child ${N(r)} joins the back of the queue.`, M({ hi: [cur, r], path: seen.slice() })); }
+      if (l !== null) { q.push(l); S('lo_left', `Left child ${N(l)} joins the BACK of the queue.`, M({ hi: [cur, l], path: seen.slice(), ...Q(cur, `push ${N(l)}`) })); }
+      if (r !== null) { q.push(r); S('lo_right', `Right child ${N(r)} joins the BACK of the queue.`, M({ hi: [cur, r], path: seen.slice(), ...Q(cur, `push ${N(r)}`) })); }
     }
-    S('lo_while', 'queue is empty → done.', M({ path: seen.slice() }));
+    S('lo_while', 'queue is empty → loop ends, every node was printed.', M({ path: seen.slice(), ...Q() }));
+    S('lo_while', 'levelOrder() returns — the local queue q is destroyed, so its box disappears.', M({ path: seen.slice() }));
   };
 
   switch (opId) {
@@ -533,5 +598,5 @@ export const avlLab: Lab = {
   ],
   init: init as () => unknown,
   snapshot: (st: unknown) => avlSnap(st as AState),
-  run: (st: unknown, opId: string, a: Record<string, number>) => holdNewNodes(runAvl(st as AState, opId, a)),
+  run: (st: unknown, opId: string, a: Record<string, number>) => markBumps(holdNewNodes(runAvl(st as AState, opId, a))),
 };

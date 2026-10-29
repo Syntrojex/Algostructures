@@ -1,10 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
   <polygon points="16,1.5 29,8.5 29,23.5 16,30.5 3,23.5 3,8.5" fill="#060c18" stroke="#00f5ff" stroke-width="2"/>
   <polygon points="16,6 24.5,11 24.5,21 16,26 7.5,21 7.5,11" fill="none" stroke="#bf5aff" stroke-width="0.8" opacity="0.6"/>
-  <!-- six-armed asterisk, centred exactly on (16,16) -->
-  <g stroke="#00f5ff" stroke-width="2.6" stroke-linecap="round">
-    <line x1="16" y1="10.2" x2="16" y2="21.8"/>
-    <line x1="10.98" y1="13.1" x2="21.02" y2="18.9"/>
-    <line x1="10.98" y1="18.9" x2="21.02" y2="13.1"/>
-  </g>
+  <!-- the "A" is drawn as a path (not text) so it sits exactly on the hexagon's centre (16,16) in every browser -->
+  <path fill="#00f5ff" fill-rule="evenodd" d="M16 10.25 L21.1 21.75 H18.9 L17.9 19.3 H14.1 L13.1 21.75 H10.9 Z M16 14.1 L14.8 17.4 H17.2 Z"/>
 </svg>

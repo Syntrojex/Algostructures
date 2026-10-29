@@ -1,7 +1,6 @@
 import type { Lab } from './core';
 
-/* Each lab file is its own chunk: opening the Stack lab does not download the Heap lab.
-   (labs/all.ts imports everything at once — it exists for tests and tooling only.) */
+/* Each lab file is its own chunk: opening the Stack lab does not download the Heap lab. */
 const LOADERS: Record<string, () => Promise<Lab>> = {
   array: () => import('./arrayLab').then(m => m.arrayLab),
   sll: () => import('./listLabs').then(m => m.sllLab),

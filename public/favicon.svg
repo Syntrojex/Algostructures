@@ -1,5 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
   <polygon points="16,1.5 29,8.5 29,23.5 16,30.5 3,23.5 3,8.5" fill="#060c18" stroke="#00f5ff" stroke-width="2"/>
   <polygon points="16,6 24.5,11 24.5,21 16,26 7.5,21 7.5,11" fill="none" stroke="#bf5aff" stroke-width="0.8" opacity="0.6"/>
-  <text x="16" y="20.5" text-anchor="middle" dominant-baseline="central" font-size="14" font-weight="900" fill="#00f5ff" font-family="Arial,sans-serif">A</text>
+  <!-- six-armed asterisk, centred exactly on (16,16) -->
+  <g stroke="#00f5ff" stroke-width="2.6" stroke-linecap="round">
+    <line x1="16" y1="10.2" x2="16" y2="21.8"/>
+    <line x1="10.98" y1="13.1" x2="21.02" y2="18.9"/>
+    <line x1="10.98" y1="18.9" x2="21.02" y2="13.1"/>
+  </g>
 </svg>
